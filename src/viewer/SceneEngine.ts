@@ -207,7 +207,7 @@ export class SceneEngine {
       if(visible){
         const size=THREE.MathUtils.clamp(distance*.035,5.5,15)
         label.scale.set(size,size*.1875,1)
-        ;(label.material as THREE.SpriteMaterial).opacity=THREE.MathUtils.mapLinear(distance,58,150,.34,.62)
+        ;(label.material as THREE.SpriteMaterial).opacity=THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance,58,150,.34,.62),.34,.62)
       }
     })
     if(this.cardboard.active){
