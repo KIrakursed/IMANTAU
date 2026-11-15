@@ -82,6 +82,7 @@ export class SceneEngine {
       const {root,mixer}=await loadLandscape(this.cb.progress,this.renderer)
       if(this.dead){disposeScene(root);return}
       this.root=root;this.mixer=mixer;
+      this.applyRuntimeSceneCorrections(root)
       const terrain=root.getObjectByName('Terrain');const terrainMesh=terrain instanceof THREE.Mesh?terrain:terrain?.children.find(c=>c instanceof THREE.Mesh) as THREE.Mesh|undefined
       if(terrainMesh){
         // Softly taper the outer terrain boundary to the fog colour rather than a hard square edge.
@@ -102,6 +103,146 @@ export class SceneEngine {
       this.setLanguage(this.language);this.captureGallery();this.renderer.shadowMap.autoUpdate=false;this.preset('reset');this.cb.ready()
     }catch(error){console.error('Landscape loading failed',error);if(!this.dead)this.cb.error()}
   }
+  /** Runtime-only GLB repair pass. Render serves static assets and never invokes Blender. */
+  private applyRuntimeSceneCorrections(root:THREE.Group){
+    root.updateMatrixWorld(true)
+    const maxAnisotropy=this.renderer.capabilities.getMaxAnisotropy()
+    const detailCanvas=document.createElement('canvas')
+    detailCanvas.width=512;detailCanvas.height=512
+    const ctx=detailCanvas.getContext('2d')
+    if(ctx){
+      const image=ctx.createImageData(512,512),data=image.data
+      const wrap=(v:number)=>((v%512)+512)%512
+      const hash=(x:number,y:number,seed:number)=>{
+        const n=Math.sin(wrap(x)*127.1+wrap(y)*311.7+seed*74.7)*43758.5453
+        return n-Math.floor(n)
+      }
+      for(let y=0;y<512;y++)for(let x=0;x<512;x++){
+        const i=(y*512+x)*4
+        const broad=hash(x>>3,y>>3,4),fine=hash(x,y,7),stone=hash(x>>1,y>>1,11)
+        const v=.58+broad*.18+fine*.17+stone*.08
+        data[i]=Math.round(105+v*65);data[i+1]=Math.round(112+v*61);data[i+2]=Math.round(91+v*55);data[i+3]=255
+      }
+      ctx.putImageData(image,0,0)
+    }
+    const detail=ctx?new THREE.CanvasTexture(detailCanvas):null
+    if(detail){
+      detail.wrapS=detail.wrapT=THREE.RepeatWrapping
+      detail.colorSpace=THREE.SRGBColorSpace
+      detail.generateMipmaps=true
+      detail.minFilter=THREE.LinearMipmapLinearFilter
+      detail.magFilter=THREE.LinearFilter
+      detail.anisotropy=maxAnisotropy
+      detail.needsUpdate=true
+    }
+    const waterLevel=.02,bedLevel=waterLevel-3.5
+    const island=this.targets.get('island')??new THREE.Vector3(-14,0,-10)
+    const waterEllipse=(x:number,z:number,cx:number,cz:number,rx:number,rz:number,angle:number)=>{
+      const c=Math.cos(angle),sn=Math.sin(angle),dx=x-cx,dz=z-cz
+      return Math.hypot((c*dx+sn*dz)/rx,(-sn*dx+c*dz)/rz)-1
+    }
+    const materialsOf=(mesh:THREE.Mesh)=>Array.isArray(mesh.material)?mesh.material:[mesh.material]
+    const obsolete:THREE.Object3D[]=[]
+    root.traverse(object=>{
+      if(!(object instanceof THREE.Mesh))return
+      object.updateMatrixWorld(true)
+      const box=new THREE.Box3().setFromObject(object),center=box.getCenter(new THREE.Vector3())
+      const mats=materialsOf(object)
+      const isWater=object.name==='Lake_Water'||mats.some(m=>m.name==='Lake_Water')
+      if(!isWater){
+        const nearIsland=center.distanceTo(new THREE.Vector3(island.x,center.y,island.z))<42
+        const flat=box.max.y-box.min.y<2.2
+        const small=box.getSize(new THREE.Vector3()).length()<125
+        const blue=mats.some(m=>{
+          const c=(m as THREE.MeshStandardMaterial).color
+          if(!c)return false
+          const hsl={h:0,s:0,l:0};c.getHSL(hsl)
+          return hsl.h>.51&&hsl.h<.72&&hsl.s>.38&&hsl.l>.12
+        })
+        const named=/water|lake|overlay|patch|plane.?02|mesh.?02/i.test(object.name)
+        if((nearIsland&&flat&&small&&blue)||(/^02[_ -]/i.test(object.name)&&blue)||(/(lake|water).*(overlay|patch)/i.test(object.name)&&!isWater)){
+          obsolete.push(object)
+          return
+        }
+        if(named&&blue&&nearIsland){obsolete.push(object);return}
+      }
+      for(const material of mats){
+        for(const value of Object.values(material)){
+          if(value instanceof THREE.Texture){
+            value.anisotropy=maxAnisotropy
+            value.minFilter=THREE.LinearMipmapLinearFilter
+            value.magFilter=THREE.LinearFilter
+            value.generateMipmaps=true
+            value.needsUpdate=true
+          }
+        }
+        if(isWater&&material instanceof THREE.MeshStandardMaterial){
+          object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
+          material.color.set('#6aaeb0')
+          material.metalness=.24;material.roughness=.12
+          material.transparent=true;material.opacity=.91;material.depthWrite=true
+          material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
+        }
+        if(object.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial&&detail){
+          material.roughness=Math.max(material.roughness,.82)
+          material.onBeforeCompile=(shader)=>{
+            shader.uniforms.uRuntimeDetail={value:detail}
+            shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
+              varying vec3 vRuntimeWorldPos;
+              varying vec3 vRuntimeWorldNormal;`).replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
+              vRuntimeWorldPos=(modelMatrix*vec4(transformed,1.0)).xyz;
+              vRuntimeWorldNormal=normalize(mat3(modelMatrix)*objectNormal);`)
+            shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
+              uniform sampler2D uRuntimeDetail;
+              varying vec3 vRuntimeWorldPos;
+              varying vec3 vRuntimeWorldNormal;`).replace('#include <map_fragment>',`#include <map_fragment>
+              vec3 runtimeN=normalize(vRuntimeWorldNormal);
+              vec3 detailA=texture2D(uRuntimeDetail,vRuntimeWorldPos.xz*.08).rgb;
+              vec3 detailB=texture2D(uRuntimeDetail,vRuntimeWorldPos.xz*.35).rgb;
+              float rockBlend=smoothstep(.3,.48,1.0-runtimeN.y);
+              vec3 grass=diffuseColor.rgb*(.78+detailA*.25+detailB*.12);
+              vec3 rock=vec3(.39,.39,.35)*(.7+detailA*.35+detailB*.2);
+              diffuseColor.rgb=mix(grass,rock,rockBlend);`)
+          }
+          material.customProgramCacheKey=()=> 'imantau-runtime-multiscale-terrain-v1'
+          material.needsUpdate=true
+        }
+      }
+      if(object.name==='Terrain'){
+        const position=object.geometry.getAttribute('position') as THREE.BufferAttribute
+        const inverse=object.matrixWorld.clone().invert()
+        const local=new THREE.Vector3(),world=new THREE.Vector3()
+        let changed=false
+        for(let i=0;i<position.count;i++){
+          local.fromBufferAttribute(position,i);world.copy(local).applyMatrix4(object.matrixWorld)
+          const x=world.x,z=world.z
+          const lake=Math.min(
+            waterEllipse(x,z,0,-5,48,26,0),
+            waterEllipse(x,z,52,-38,40,12,-.4887),
+            waterEllipse(x,z,30,14,20,13,0),
+            waterEllipse(x,z,-62,-50,20,5,-.1745)
+          )
+          const isIsland=waterEllipse(x,z,island.x,island.z,13,5.5,.1745)<=0
+          if(lake<=.035&&!isIsland&&world.y>bedLevel){
+            world.y=bedLevel
+            world.applyMatrix4(inverse)
+            position.setXYZ(i,world.x,world.y,world.z)
+            changed=true
+          }
+        }
+        if(changed){position.needsUpdate=true;object.geometry.computeVertexNormals();object.geometry.computeBoundingBox();object.geometry.computeBoundingSphere()}
+      }
+    })
+    for(const object of obsolete){
+      const parent=object.parent
+      parent?.remove(object)
+      if(object instanceof THREE.Mesh){object.geometry.dispose();for(const material of materialsOf(object))material.dispose()}
+      console.info('[IMANTAU] Removed obsolete lake overlay mesh:',object.name)
+    }
+    detail?.dispose()
+    root.updateMatrixWorld(true)
+  }
+
   private featherTerrainPerimeter(mesh:THREE.Mesh){
     const position=mesh.geometry.getAttribute('position') as THREE.BufferAttribute
     const box=mesh.geometry.boundingBox??(mesh.geometry.computeBoundingBox(),mesh.geometry.boundingBox!)
