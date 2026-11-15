@@ -108,7 +108,7 @@ def fields(x, y):
         g = np.exp(-((x - cx) ** 2 + (y - cy) ** 2) / r ** 2)
         rock = np.maximum(rock, g)
         land = land + h * g * (0.55 + 0.9 * ridged(x / 5, y / 5, 3, seed=cx))
-    # lake bed: gentle shallows at the beach cove, deeper elsewhere
+    # lake bed: gently sloped shallows are overridden to a constant safe depth below the water plane
     soft = 10 + 14 * beach
     bed = -6 * (1 - np.exp(np.minimum(d, 0) / soft))
     h = np.where(d > 0, land + mountain, bed + 0.15)
@@ -191,7 +191,9 @@ lake_d = lake_sdf(GX, GY)
 island_d = ellipse_sdf(GX, GY, *ISLAND)
 islet_d = ellipse_sdf(GX, GY, *ISLET)
 underwater = (lake_d <= 0.0) & (island_d > 0.0) & (islet_d > 0.0)
-H = np.where(underwater, np.minimum(H, -0.35), H).astype(np.float32)
+WATER_LEVEL = 0.02
+LAKE_BED_LEVEL = WATER_LEVEL - 2.5
+H = np.where(underwater, np.minimum(H, LAKE_BED_LEVEL), H).astype(np.float32)
 nx, ny = len(xs), len(ys)
 verts = np.stack([GX.ravel(), GY.ravel(), H.ravel()], 1)
 idx = np.arange(nx * ny).reshape(ny, nx)
