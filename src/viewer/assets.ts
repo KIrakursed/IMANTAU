@@ -125,7 +125,7 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
     }
     if(material.name==='Terrain'){object.castShadow=false;if(detailTexture)improveTerrainMaterial(object,renderer,detailTexture)}
     if(material.name==='Lake_Water'){
-      material.polygonOffset=true;material.polygonOffsetFactor=1;material.polygonOffsetUnits=1
+      material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
     }
     const key=object.geometry.uuid+'|'+material.uuid
     const list=uses.get(key)??[];list.push(object);uses.set(key,list)
