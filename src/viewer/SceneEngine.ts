@@ -16,7 +16,7 @@ const POSES={
   shore:{position:new THREE.Vector3(176,16,8),target:new THREE.Vector3(30,6,52)},
 }
 export interface MarkerPosition {id:string;x:number;y:number;visible:boolean}
-export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void}
+export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void;vrInfo?:(id:string|null)=>void}
 export class SceneEngine {
   readonly scene=new THREE.Scene()
   readonly camera=new THREE.PerspectiveCamera(42,1,.05,5000)
@@ -27,7 +27,6 @@ export class SceneEngine {
   private root?:THREE.Group
   private mixer?:THREE.AnimationMixer
   private ground?:Heightfield
-  private focusedId:string|null=null
   private gazeCandidate?:THREE.Vector3
   private gazeStarted=0
   private readonly gazeDuration=1600
@@ -36,6 +35,7 @@ export class SceneEngine {
   private fogColor=new THREE.Color('#c8d5d4')
   private vrMove?:{start:number;duration:number;from:THREE.Vector3;to:THREE.Vector3}
   private vrEnteredAt=0
+  private plaqueId:string|null=null;private plaqueSince=0;private plaqueLost=0;private vrInfoId:string|null=null
   private readonly vrHintDuration=3000
   private observer:ResizeObserver
   private dead=false
@@ -132,7 +132,7 @@ export class SceneEngine {
   focus(id:string){
     const p=places.find(p=>p.id===id),target=this.targets.get(id)
     if(!p||!target)return
-    this.focusedId=id
+
     // Keep the chosen POI centered in the actual camera frustum. The previous
     // diagonal offset was especially misleading on portrait screens and when
     // a side/bottom information panel changed the viewport composition.
@@ -174,7 +174,7 @@ export class SceneEngine {
     return {target,position:target.clone().addScaledVector(dir,distance)}
   }
   preset(name:'reset'|'aerial'|'shore'){
-    this.focusedId=null
+
     const fitted=name==='reset'?this.fitAllPose():null
     if(fitted){this.move(fitted.target,fitted.position);this.ring.visible=false;return}
     const target=POSES[name].target.clone(),position=POSES[name].position.clone()
@@ -210,7 +210,7 @@ export class SceneEngine {
       const canvas=document.createElement('canvas');canvas.width=512;canvas.height=96
       const ctx=canvas.getContext('2d')!;ctx.fillStyle='#163d32';ctx.fillRect(0,0,512,96);ctx.fillStyle='#fff9e8';ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText(p.number+'  '+p.title[language],256,59)
       const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace
-      const label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,opacity:.62,depthTest:true,depthWrite:false,toneMapped:false}));label.position.copy(position).add(new THREE.Vector3(0,5,0));label.scale.set(12,2.25,1);label.visible=false;this.scene.add(label);this.labels.set(p.id,label)
+      const label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,opacity:.9,depthTest:false,depthWrite:false,toneMapped:false,fog:false}));label.renderOrder=20;label.position.copy(position).add(new THREE.Vector3(0,6,0));label.scale.set(12,2.25,1);label.visible=false;this.scene.add(label);this.labels.set(p.id,label)
     }
     this.renderer.domElement.setAttribute('aria-label',language==='kk'?'Имантау интерактивті 3D көрінісі':'Интерактивная 3D-сцена Имантау')
   }
@@ -218,29 +218,11 @@ export class SceneEngine {
   async startVR(){
     this.transition=undefined
     this.controls.update()
-    // Default: stand on the shore by Imantau village looking at Kazachy Island and the mountain —
-    // never at the overview camera, which hangs hundreds of metres above the ground.
-    let spawn=new THREE.Vector3(132,0,22)
-    let target=(this.targets.get('island')??new THREE.Vector3(42,2,-3)).clone()
-    const village=this.targets.get('village')
-    if(village){const toIsland=target.clone().sub(village).setY(0).normalize();spawn=village.clone().addScaledVector(toIsland,10)}
-    const spawnGround=this.ground?.at(spawn.x,spawn.z)
-    spawn.y=(spawnGround??2)+this.eyeHeight
-    // If a POI was selected, spawn beside that exact location instead of
-    // inheriting the distant overview camera position.
-    if(this.focusedId){
-      const poi=this.targets.get(this.focusedId)
-      if(poi){
-        const away=this.camera.position.clone().sub(poi)
-        away.y=0
-        if(away.lengthSq()<1e-5)away.set(0,0,1)
-        away.normalize()
-        spawn=poi.clone().addScaledVector(away,16)
-        const ground=this.ground?.at(spawn.x,spawn.z)??null
-        spawn.y=ground===null?poi.y+8:ground+4.8
-        target=poi.clone()
-      }
-    }
+    // Start where all six places are in view at once (solved for the VR field of view).
+    const pose=this.fitVRPose()
+    let spawn=pose?.position??new THREE.Vector3(132,40,22)
+    let target=pose?.target??(this.targets.get('island')??new THREE.Vector3(42,2,-3)).clone()
+
     const ok=await this.cardboard.start(spawn,target)
     this.controls.enabled=!ok
     if(ok){
@@ -252,7 +234,7 @@ export class SceneEngine {
     }
     return ok
   }
-  stopVR(){this.resetGaze();this.vrMove=undefined;this.cardboard.stop();this.controls.enabled=true;this.resize()}
+  stopVR(){this.plaqueId=null;this.setVRInfo(null);this.resetGaze();this.vrMove=undefined;this.cardboard.stop();this.controls.enabled=true;this.resize()}
   private animate=()=>{
     if(this.dead)return
     this.frame=requestAnimationFrame(this.animate)
@@ -272,20 +254,21 @@ export class SceneEngine {
     this.labels.forEach((label,id)=>{
       const distance=label.position.distanceTo(this.camera.position)
       // Keep the nearest/selected POI clear; labels fade out before they can fill the headset view.
-      const visible=this.cardboard.active&&this.annotations&&id!==this.focusedId&&distance>=15&&distance<900
+      // Plaques keep a constant, readable angular size (~4 deg wide) at any distance.
+      const visible=this.cardboard.active&&this.annotations&&distance>=10
       label.visible=visible
       if(visible){
-        const size=Math.min(10,THREE.MathUtils.clamp(distance*.022,2.4,10))
+        const looked=id===this.plaqueId
+        const size=THREE.MathUtils.clamp(distance*.075,2.5,90)*(looked?1.25:1)
         label.scale.set(size,size*.1875,1)
-        const nearFade=THREE.MathUtils.smoothstep(distance,15,23)
-        ;(label.material as THREE.SpriteMaterial).opacity=nearFade*THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance,23,150,.25,.58),.25,.58)
+        ;(label.material as THREE.SpriteMaterial).opacity=(looked?1:.9)*THREE.MathUtils.smoothstep(distance,10,18)
       }
     })
     if(this.cardboard.active){
       if(time-this.vrEnteredAt<this.vrHintDuration) this.host.dataset.vrHint='visible'
       else this.host.dataset.vrHint='hidden'
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
-      else{this.updateVRMovement(time);this.enforceVRCameraClearance();if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
+      else{this.updateVRMovement(time);this.enforceVRCameraClearance();const reading=this.updatePlaqueGaze(time);if(reading)this.resetGaze();else if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
       this.controls.update();this.renderer.setScissorTest(false);this.renderer.setViewport(0,0,this.width,this.height);this.renderer.render(this.scene,this.camera)
       if(import.meta.env.DEV&&time-this.statsTime>1000){this.statsTime=time;this.renderer.domElement.dataset.diagnostics=JSON.stringify({...this.stats,fps:Math.round(1000/(this.samples.reduce((a,b)=>a+b,0)/this.samples.length))})}
@@ -296,24 +279,8 @@ export class SceneEngine {
   private getGazeDestination(origin:THREE.Vector3,direction:THREE.Vector3):THREE.Vector3|null{
     if(!this.cardboard.active||!this.ground)return null
     const dir=direction.clone().normalize()
-    let nearest:THREE.Vector3|undefined,nearestAlong=Infinity
-    for(const target of this.targets.values()){
-      const offset=target.clone().sub(origin),along=offset.dot(dir)
-      if(along<=0||along>=nearestAlong)continue
-      const miss=offset.addScaledVector(dir,-along).length()
-      if(miss<=7){nearest=target;nearestAlong=along}
-    }
-    let hit:THREE.Vector3|null=null
-    if(nearest){
-      const away=origin.clone().sub(nearest);away.y=0
-      if(away.lengthSq()<1e-5)away.set(0,0,1)
-      away.normalize()
-      const landing=nearest.clone().addScaledVector(away,12)
-      const height=this.ground.at(landing.x,landing.z)
-      if(height!==null)hit=new THREE.Vector3(landing.x,height,landing.z)
-    }else{
-      hit=this.ground.raycast(origin,dir,260,.8)
-    }
+    // Plaques open their info card (updatePlaqueGaze); only the ground is a walking target.
+    const hit=this.ground.raycast(origin,dir,900,.8)
     if(!hit||hit.y<.15||hit.distanceTo(origin)<1.5)return null
 
     // Clamp each gaze step to a short, comfortable horizontal walking distance.
@@ -392,6 +359,51 @@ export class SceneEngine {
       this.vrMove={start:time,duration:2000,from,to}
       this.resetGaze()
     }
+  }
+  private setVRInfo(id:string|null){if(id!==this.vrInfoId){this.vrInfoId=id;this.cb.vrInfo?.(id)}}
+  /** Gaze at a plaque for 0.4 s -> its info card opens; it closes ~0.8 s after looking away.
+   *  Returns true while a plaque is being looked at (walking is paused). */
+  private updatePlaqueGaze(time:number){
+    if(!this.annotations){this.plaqueId=null;this.setVRInfo(null);return false}
+    const forward=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion)
+    let best:string|null=null,bestAngle=Infinity
+    this.labels.forEach((label,id)=>{
+      if(!label.visible)return
+      const to=label.position.clone().sub(this.camera.position),dist=to.length()
+      const angle=forward.angleTo(to)
+      const reach=Math.atan2(label.scale.x*.55,dist)+THREE.MathUtils.degToRad(1.5)
+      if(angle<reach&&angle<bestAngle){best=id;bestAngle=angle}
+    })
+    if(best!==this.plaqueId){this.plaqueId=best;this.plaqueSince=time}
+    if(best){
+      this.plaqueLost=0
+      if(time-this.plaqueSince>400)this.setVRInfo(best)
+      return true
+    }
+    if(this.vrInfoId){if(!this.plaqueLost)this.plaqueLost=time;else if(time-this.plaqueLost>800)this.setVRInfo(null)}
+    return false
+  }
+  /** Elevated VR viewpoint from which all six places fit the (wide) headset view with a level
+   *  gaze, looking from the north end of the lake towards the Imantau massif. */
+  private fitVRPose(){
+    const points=[...this.targets.values()]
+    if(points.length<2)return null
+    const center=points.reduce((a,p)=>a.add(p),new THREE.Vector3()).multiplyScalar(1/points.length)
+    const aspect=Math.max(this.width/this.height,this.height/this.width,1.6)
+    const cam=new THREE.PerspectiveCamera(80,aspect,1,8000),v=new THREE.Vector3()
+    const dir=new THREE.Vector3(-.21,0,-.95).normalize()
+    let best:{position:THREE.Vector3;target:THREE.Vector3}|null=null,bestD=Infinity
+    for(const h of [25,40,60,80,110,150,200]){
+      for(let d=30;d<bestD&&d<1400;d+=10){
+        const pos=center.clone().addScaledVector(dir,d);pos.y=center.y+h
+        const ground=this.ground?.at(pos.x,pos.z);if(ground!=null&&pos.y<ground+8)continue
+        cam.position.copy(pos);cam.lookAt(center.x,pos.y,center.z);cam.updateMatrixWorld()
+        let ok=true
+        for(const p of points){v.copy(p).add(new THREE.Vector3(0,6,0)).project(cam);if(v.z>1||Math.abs(v.x)>.84||v.y<-.86||v.y>.6){ok=false;break}}
+        if(ok){bestD=d;best={position:pos,target:new THREE.Vector3(center.x,pos.y,center.z)};break}
+      }
+    }
+    return best
   }
   get stats(){return{...this.renderer.info.memory,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,poiCount:this.targets.size,groundReady:!!this.ground,groundAtLake:this.ground?.at(-12.6,-66)??null}}
   dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
