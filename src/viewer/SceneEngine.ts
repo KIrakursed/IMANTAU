@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { places, type Language } from '../data/content'
 import { lighting } from './lighting'
-import { loadLandscape, disposeScene } from './assets'
+import { loadLandscape, disposeScene, getSafeTeleportPosition } from './assets'
 import { Cardboard } from './Cardboard'
 import { Heightfield } from './heightfield'
 /** Camera poses (three.js Y-up). 'reset' mirrors the reference photo: high, from the south shore,
@@ -19,7 +19,7 @@ export interface MarkerPosition {id:string;x:number;y:number;visible:boolean}
 export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void}
 export class SceneEngine {
   readonly scene=new THREE.Scene()
-  readonly camera=new THREE.PerspectiveCamera(42,1,.3,6000)
+  readonly camera=new THREE.PerspectiveCamera(42,1,.05,5000)
   readonly renderer:THREE.WebGLRenderer
   readonly controls:OrbitControls
   readonly cardboard:Cardboard
@@ -70,7 +70,7 @@ export class SceneEngine {
   private contextLost=(e:Event)=>{e.preventDefault();this.cb.error()}
   private async load(){
     try{
-      const {root,mixer}=await loadLandscape(this.cb.progress)
+      const {root,mixer}=await loadLandscape(this.cb.progress,this.renderer)
       if(this.dead){disposeScene(root);return}
       this.root=root;this.mixer=mixer;
       const terrain=root.getObjectByName('Terrain');const terrainMesh=terrain instanceof THREE.Mesh?terrain:terrain?.children.find(c=>c instanceof THREE.Mesh) as THREE.Mesh|undefined
@@ -235,15 +235,15 @@ export class SceneEngine {
       away.y=0
       if(away.lengthSq()<1e-5)away.set(0,0,1)
       away.normalize()
-      const destination=nearest.clone().addScaledVector(away,12)
-      destination.y=(this.ground.at(destination.x,destination.z)??nearest.y+5)+4.8
+      const landing=nearest.clone().addScaledVector(away,12)
+      const destination=getSafeTeleportPosition(new THREE.Vector3(landing.x,this.ground.at(landing.x,landing.z)??nearest.y,landing.z))
       if(perform&&destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
       if(perform)this.camera.updateMatrixWorld(true)
       return true
     }
     const hit=this.ground.raycast(origin,dir,260,.8)
     if(!hit||hit.y<.15||hit.distanceTo(origin)<1.5)return false
-    const destination=hit.clone().add(new THREE.Vector3(0,4.8,0))
+    const destination=getSafeTeleportPosition(hit)
     if(perform&&destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
     if(perform)this.camera.updateMatrixWorld(true)
     return true
