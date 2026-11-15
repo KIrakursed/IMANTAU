@@ -143,7 +143,30 @@ export class SceneEngine {
     this.renderer.domElement.setAttribute('aria-label',language==='kk'?'Имантау интерактивті 3D көрінісі':'Интерактивная 3D-сцена Имантау')
   }
   setAnnotations(value:boolean){this.annotations=value}
-  async startVR(){this.transition=undefined;const ok=await this.cardboard.start();this.controls.enabled=!ok;if(ok){this.camera.clearViewOffset();this.resize()}return ok}
+  async startVR(){
+    this.transition=undefined
+
+    // The VR spawn is anchored to the authored south-east shore camera pose.
+    // Resolve its Y coordinate from the loaded terrain instead of hard-coding
+    // a position that may put the viewer inside the lake or below the ground.
+    const shore=POSES.shore.position
+    const terrainHeight=this.ground?.at(shore.x,shore.z)??null
+    const spawn=new THREE.Vector3(
+      shore.x,
+      terrainHeight===null?shore.y:terrainHeight+4.8,
+      shore.z,
+    )
+    const target=POSES.shore.target.clone()
+    target.y=spawn.y
+
+    const ok=await this.cardboard.start(spawn,target)
+    this.controls.enabled=!ok
+    if(ok){
+      this.camera.clearViewOffset()
+      this.resize()
+    }
+    return ok
+  }
   stopVR(){this.walk=undefined;this.gazeDwell=0;this.setGaze(0);this.cardboard.stop();this.controls.enabled=true;this.resize()}
   private animate=()=>{
     if(this.dead)return
