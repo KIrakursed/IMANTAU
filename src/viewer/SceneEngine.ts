@@ -232,7 +232,7 @@ export class SceneEngine {
       return true
     }
     const hit=this.ground.raycast(origin,dir,260,.8)
-    if(!hit||hit.y<.15||hit.distanceTo(origin)<5)return false
+    if(!hit||hit.y<.15||hit.distanceTo(origin)<1.5)return false
     const destination=hit.clone().add(new THREE.Vector3(0,4.8,0))
     if(perform&&destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
     if(perform)this.camera.updateMatrixWorld(true)
