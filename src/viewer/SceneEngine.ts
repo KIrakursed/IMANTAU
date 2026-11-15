@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { places, type Language } from '../data/content'
 import { lighting } from './lighting'
-import { loadLandscape, disposeScene } from './assets'
+import { loadLandscape, disposeScene, getSafeRidgeCameraY } from './assets'
 import { Cardboard } from './Cardboard'
 import { Heightfield } from './heightfield'
 /** Camera poses (three.js Y-up). 'reset' mirrors the reference photo: high, from the south shore,
@@ -255,7 +255,7 @@ export class SceneEngine {
     const x=origin.x+offset.x,z=origin.z+offset.z
     const terrainHeight=this.ground.at(x,z)
     if(terrainHeight===null)return null
-    return new THREE.Vector3(x,terrainHeight+this.eyeHeight,z)
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)\n    return new THREE.Vector3(x,safeY??terrainHeight+this.eyeHeight,z)
   }
 
   private resetGaze(){
@@ -278,7 +278,7 @@ export class SceneEngine {
       this.resetGaze()
       return
     }
-    this.camera.position.set(x,terrain+this.eyeHeight,z)
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)\n    this.camera.position.set(x,safeY??terrain+this.eyeHeight,z)
     this.camera.updateMatrixWorld(true)
     if(t>=1){
       this.camera.position.copy(move.to)
