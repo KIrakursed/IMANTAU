@@ -225,6 +225,14 @@ export class SceneEngine {
     const time=performance.now()
     const delta=time-this.previousFrame;this.previousFrame=time;if(delta<250){this.samples.push(delta);if(this.samples.length>90)this.samples.shift()}
     this.mixer?.update(Math.min(delta,100)/1000)
+    const waterTime=performance.now()*.001
+    this.root?.traverse(object=>{
+      if(!(object instanceof THREE.Mesh))return
+      for(const material of Array.isArray(object.material)?object.material:[object.material]){
+        const uniforms=(material.userData as {waterUniforms?:{value:number}}).waterUniforms
+        if(uniforms)uniforms.value=waterTime
+      }
+    })
     if(this.transition){const t=Math.min((time-this.transition.start)/1100,1),ease=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;this.camera.position.lerpVectors(this.transition.from,this.transition.to,ease);this.controls.target.lerpVectors(this.transition.targetFrom,this.transition.targetTo,ease);if(t===1)this.transition=undefined}
     this.labels.forEach((label,id)=>{
       const distance=label.position.distanceTo(this.camera.position)
