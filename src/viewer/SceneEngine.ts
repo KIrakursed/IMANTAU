@@ -27,7 +27,6 @@ export class SceneEngine {
   private root?:THREE.Group
   private mixer?:THREE.AnimationMixer
   private ground?:Heightfield
-  private runtimeDetail?:THREE.Texture
   private focusedId:string|null=null
   private gazeCandidate?:THREE.Vector3
   private gazeStarted=0
@@ -83,7 +82,6 @@ export class SceneEngine {
       const {root,mixer}=await loadLandscape(this.cb.progress,this.renderer)
       if(this.dead){disposeScene(root);return}
       this.root=root;this.mixer=mixer;
-      this.applyRuntimeSceneCorrections(root)
       const terrain=root.getObjectByName('Terrain');const terrainMesh=terrain instanceof THREE.Mesh?terrain:terrain?.children.find(c=>c instanceof THREE.Mesh) as THREE.Mesh|undefined
       if(terrainMesh){
         // Softly taper the outer terrain boundary to the fog colour rather than a hard square edge.
@@ -104,146 +102,6 @@ export class SceneEngine {
       this.setLanguage(this.language);this.captureGallery();this.renderer.shadowMap.autoUpdate=false;this.preset('reset');this.cb.ready()
     }catch(error){console.error('Landscape loading failed',error);if(!this.dead)this.cb.error()}
   }
-  /** Runtime-only GLB repair pass. Render serves static assets and never invokes Blender. */
-  private applyRuntimeSceneCorrections(root:THREE.Group){
-    root.updateMatrixWorld(true)
-    const maxAnisotropy=this.renderer.capabilities.getMaxAnisotropy()
-    const detailCanvas=document.createElement('canvas')
-    detailCanvas.width=512;detailCanvas.height=512
-    const ctx=detailCanvas.getContext('2d')
-    if(ctx){
-      const image=ctx.createImageData(512,512),data=image.data
-      const wrap=(v:number)=>((v%512)+512)%512
-      const hash=(x:number,y:number,seed:number)=>{
-        const n=Math.sin(wrap(x)*127.1+wrap(y)*311.7+seed*74.7)*43758.5453
-        return n-Math.floor(n)
-      }
-      for(let y=0;y<512;y++)for(let x=0;x<512;x++){
-        const i=(y*512+x)*4
-        const broad=hash(x>>3,y>>3,4),fine=hash(x,y,7),stone=hash(x>>1,y>>1,11)
-        const v=.58+broad*.18+fine*.17+stone*.08
-        data[i]=Math.round(105+v*65);data[i+1]=Math.round(112+v*61);data[i+2]=Math.round(91+v*55);data[i+3]=255
-      }
-      ctx.putImageData(image,0,0)
-    }
-    const detail=ctx?new THREE.CanvasTexture(detailCanvas):null
-    this.runtimeDetail=detail??undefined
-    if(detail){
-      detail.wrapS=detail.wrapT=THREE.RepeatWrapping
-      detail.colorSpace=THREE.SRGBColorSpace
-      detail.generateMipmaps=true
-      detail.minFilter=THREE.LinearMipmapLinearFilter
-      detail.magFilter=THREE.LinearFilter
-      detail.anisotropy=maxAnisotropy
-      detail.needsUpdate=true
-    }
-    const waterLevel=.02,bedLevel=waterLevel-3.5
-    const island=this.targets.get('island')??new THREE.Vector3(-14,0,-10)
-    const waterEllipse=(x:number,z:number,cx:number,cz:number,rx:number,rz:number,angle:number)=>{
-      const c=Math.cos(angle),sn=Math.sin(angle),dx=x-cx,dz=z-cz
-      return Math.hypot((c*dx+sn*dz)/rx,(-sn*dx+c*dz)/rz)-1
-    }
-    const materialsOf=(mesh:THREE.Mesh)=>Array.isArray(mesh.material)?mesh.material:[mesh.material]
-    const obsolete:THREE.Object3D[]=[]
-    root.traverse(object=>{
-      if(!(object instanceof THREE.Mesh))return
-      object.updateMatrixWorld(true)
-      const box=new THREE.Box3().setFromObject(object),center=box.getCenter(new THREE.Vector3())
-      const mats=materialsOf(object)
-      const isWater=object.name==='Lake_Water'||mats.some(m=>m.name==='Lake_Water')
-      if(!isWater){
-        const nearIsland=center.distanceTo(new THREE.Vector3(island.x,center.y,island.z))<42
-        const flat=box.max.y-box.min.y<2.2
-        const small=box.getSize(new THREE.Vector3()).length()<125
-        const blue=mats.some(m=>{
-          const c=(m as THREE.MeshStandardMaterial).color
-          if(!c)return false
-          const hsl={h:0,s:0,l:0};c.getHSL(hsl)
-          return hsl.h>.51&&hsl.h<.72&&hsl.s>.38&&hsl.l>.12
-        })
-        const named=/water|lake|overlay|patch|plane.?02|mesh.?02/i.test(object.name)
-        if((nearIsland&&flat&&small&&blue)||(/^02[_ -]/i.test(object.name)&&blue)||(/(lake|water).*(overlay|patch)/i.test(object.name)&&!isWater)){
-          obsolete.push(object)
-          return
-        }
-        if(named&&blue&&nearIsland){obsolete.push(object);return}
-      }
-      for(const material of mats){
-        for(const value of Object.values(material)){
-          if(value instanceof THREE.Texture){
-            value.anisotropy=maxAnisotropy
-            value.minFilter=THREE.LinearMipmapLinearFilter
-            value.magFilter=THREE.LinearFilter
-            value.generateMipmaps=true
-            value.needsUpdate=true
-          }
-        }
-        if(isWater&&material instanceof THREE.MeshStandardMaterial){
-          object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
-          material.color.set('#6aaeb0')
-          material.metalness=.24;material.roughness=.12
-          material.transparent=true;material.opacity=.91;material.depthWrite=true
-          material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
-        }
-        if(object.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial&&detail){
-          material.roughness=Math.max(material.roughness,.82)
-          material.onBeforeCompile=(shader)=>{
-            shader.uniforms.uRuntimeDetail={value:detail}
-            shader.vertexShader=shader.vertexShader.replace('#include <common>',`#include <common>
-              varying vec3 vRuntimeWorldPos;
-              varying vec3 vRuntimeWorldNormal;`).replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
-              vRuntimeWorldPos=(modelMatrix*vec4(transformed,1.0)).xyz;
-              vRuntimeWorldNormal=normalize(mat3(modelMatrix)*objectNormal);`)
-            shader.fragmentShader=shader.fragmentShader.replace('#include <common>',`#include <common>
-              uniform sampler2D uRuntimeDetail;
-              varying vec3 vRuntimeWorldPos;
-              varying vec3 vRuntimeWorldNormal;`).replace('#include <map_fragment>',`#include <map_fragment>
-              vec3 runtimeN=normalize(vRuntimeWorldNormal);
-              vec3 detailA=texture2D(uRuntimeDetail,vRuntimeWorldPos.xz*.08).rgb;
-              vec3 detailB=texture2D(uRuntimeDetail,vRuntimeWorldPos.xz*.35).rgb;
-              float rockBlend=smoothstep(.3,.48,1.0-runtimeN.y);
-              vec3 grass=diffuseColor.rgb*(.78+detailA*.25+detailB*.12);
-              vec3 rock=vec3(.39,.39,.35)*(.7+detailA*.35+detailB*.2);
-              diffuseColor.rgb=mix(grass,rock,rockBlend);`)
-          }
-          material.customProgramCacheKey=()=> 'imantau-runtime-multiscale-terrain-v1'
-          material.needsUpdate=true
-        }
-      }
-      if(object.name==='Terrain'){
-        const position=object.geometry.getAttribute('position') as THREE.BufferAttribute
-        const inverse=object.matrixWorld.clone().invert()
-        const local=new THREE.Vector3(),world=new THREE.Vector3()
-        let changed=false
-        for(let i=0;i<position.count;i++){
-          local.fromBufferAttribute(position,i);world.copy(local).applyMatrix4(object.matrixWorld)
-          const x=world.x,z=world.z
-          const lake=Math.min(
-            waterEllipse(x,z,0,-5,48,26,0),
-            waterEllipse(x,z,52,-38,40,12,-.4887),
-            waterEllipse(x,z,30,14,20,13,0),
-            waterEllipse(x,z,-62,-50,20,5,-.1745)
-          )
-          const isIsland=waterEllipse(x,z,island.x,island.z,13,5.5,.1745)<=0
-          if(lake<=.035&&!isIsland&&world.y>bedLevel){
-            world.y=bedLevel
-            world.applyMatrix4(inverse)
-            position.setXYZ(i,world.x,world.y,world.z)
-            changed=true
-          }
-        }
-        if(changed){position.needsUpdate=true;object.geometry.computeVertexNormals();object.geometry.computeBoundingBox();object.geometry.computeBoundingSphere()}
-      }
-    })
-    for(const object of obsolete){
-      const parent=object.parent
-      parent?.remove(object)
-      if(object instanceof THREE.Mesh){object.geometry.dispose();for(const material of materialsOf(object))material.dispose()}
-      console.info('[IMANTAU] Removed obsolete lake overlay mesh:',object.name)
-    }
-    root.updateMatrixWorld(true)
-  }
-
   private featherTerrainPerimeter(mesh:THREE.Mesh){
     const position=mesh.geometry.getAttribute('position') as THREE.BufferAttribute
     const box=mesh.geometry.boundingBox??(mesh.geometry.computeBoundingBox(),mesh.geometry.boundingBox!)
@@ -288,8 +146,37 @@ export class SceneEngine {
     this.ring.visible=true
     this.ring.scale.setScalar(Math.max(8,p.distance*.28))
   }
+  /** Frame every place of interest inside the free part of the screen (outside the heading,
+   *  the place list and the bottom bar), looking from the north end of the lake towards the
+   *  Imantau massif. Solved numerically so it holds for any window size or aspect ratio. */
+  private fitAllPose(){
+    const points=[...this.targets.values()]
+    if(points.length<2||!this.width||!this.height)return null
+    const aspect=this.width/this.height,portrait=aspect<1,desktop=this.width>900
+    const dir=(portrait?new THREE.Vector3(.04,.78,.62):new THREE.Vector3(-.21,.24,-.95)).normalize()
+    // Free screen window in NDC: [x0,x1] x [y0,y1]
+    const win=portrait?{x0:-.82,x1:.82,y0:-.62,y1:.42}:desktop?{x0:-.4,x1:.86,y0:-.66,y1:.4}:{x0:-.84,x1:.84,y0:-.62,y1:.45}
+    const cam=new THREE.PerspectiveCamera(this.camera.fov,aspect,1,8000)
+    const target=points.reduce((a,p)=>a.add(p),new THREE.Vector3()).multiplyScalar(1/points.length)
+    let distance=400
+    const halfTan=Math.tan(THREE.MathUtils.degToRad(cam.fov/2)),v=new THREE.Vector3()
+    for(let i=0;i<60;i++){
+      cam.position.copy(target).addScaledVector(dir,distance);cam.lookAt(target);cam.updateMatrixWorld()
+      let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity
+      for(const p of points){v.copy(p).project(cam);x0=Math.min(x0,v.x);x1=Math.max(x1,v.x);y0=Math.min(y0,v.y);y1=Math.max(y1,v.y)}
+      const scale=Math.max((x1-x0)/(win.x1-win.x0),(y1-y0)/(win.y1-win.y0))
+      distance=THREE.MathUtils.clamp(distance*(1+(scale-1)*.6),60,2400)
+      const right=new THREE.Vector3(1,0,0).applyQuaternion(cam.quaternion),up=new THREE.Vector3(0,1,0).applyQuaternion(cam.quaternion)
+      const h=halfTan*distance
+      target.addScaledVector(right,((x0+x1)/2-(win.x0+win.x1)/2)*h*aspect*.6).addScaledVector(up,((y0+y1)/2-(win.y0+win.y1)/2)*h*.6)
+    }
+    distance*=1.05
+    return {target,position:target.clone().addScaledVector(dir,distance)}
+  }
   preset(name:'reset'|'aerial'|'shore'){
     this.focusedId=null
+    const fitted=name==='reset'?this.fitAllPose():null
+    if(fitted){this.move(fitted.target,fitted.position);this.ring.visible=false;return}
     const target=POSES[name].target.clone(),position=POSES[name].position.clone()
     // Portrait screens: back off until the lake (~150 units wide) fits the horizontal field of view.
     const aspect=this.width/this.height
@@ -331,8 +218,14 @@ export class SceneEngine {
   async startVR(){
     this.transition=undefined
     this.controls.update()
-    let spawn=this.camera.position.clone()
-    let target=this.controls.target.clone()
+    // Default: stand on the shore by Imantau village looking at Kazachy Island and the mountain —
+    // never at the overview camera, which hangs hundreds of metres above the ground.
+    let spawn=new THREE.Vector3(132,0,22)
+    let target=(this.targets.get('island')??new THREE.Vector3(42,2,-3)).clone()
+    const village=this.targets.get('village')
+    if(village){const toIsland=target.clone().sub(village).setY(0).normalize();spawn=village.clone().addScaledVector(toIsland,10)}
+    const spawnGround=this.ground?.at(spawn.x,spawn.z)
+    spawn.y=(spawnGround??2)+this.eyeHeight
     // If a POI was selected, spawn beside that exact location instead of
     // inheriting the distant overview camera position.
     if(this.focusedId){
@@ -501,5 +394,5 @@ export class SceneEngine {
     }
   }
   get stats(){return{...this.renderer.info.memory,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,poiCount:this.targets.size,groundReady:!!this.ground,groundAtLake:this.ground?.at(-12.6,-66)??null}}
-  dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.runtimeDetail?.dispose();this.runtimeDetail=undefined;this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
+  dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
 }

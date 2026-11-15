@@ -82,12 +82,12 @@ function improveTerrainMaterial(mesh:THREE.Mesh,renderer:THREE.WebGLRenderer,det
           }`)
         .replace('#include <map_fragment>',`#include <map_fragment>
           vec3 terrainN=normalize(vTerrainWorldNormal);
-          // 180 repeats over the authored 380x440m terrain footprint.
+          // Fine detail over the satellite albedo (world units: 1 = 40 m).
           vec3 terrainP=vTerrainWorldPos*0.40909;
           vec3 detailAlbedo=imantauTriplanar(uTerrainDetail,terrainP,terrainN);
-          float slopeRock=smoothstep(0.25,0.42,1.0-terrainN.y);
+          float slopeRock=smoothstep(0.38,0.6,1.0-terrainN.y)*0.6;
           vec3 grassDetail=diffuseColor.rgb*(0.82+detailAlbedo*0.34);
-          vec3 stoneBase=vec3(0.43,0.43,0.39);
+          vec3 stoneBase=diffuseColor.rgb*0.55+vec3(0.12,0.12,0.11);  // satellite-tinted gneiss, not white
           vec3 stoneDetail=stoneBase*(0.72+detailAlbedo*0.58);
           diffuseColor.rgb=mix(grassDetail,stoneDetail,slopeRock);`)
     }
@@ -118,92 +118,6 @@ export function getSafeTeleportPosition(hitPoint:THREE.Vector3,hitNormal?:THREE.
 
 
 
-/** Lower GLB terrain vertices beneath the water surface inside the lake basin. */
-function lowerLakeBed(mesh:THREE.Mesh,waterLevel=.02,bedLevel=waterLevel-2.5){
-  mesh.updateMatrixWorld(true)
-  const position=mesh.geometry.getAttribute('position')
-  const inverse=mesh.matrixWorld.clone().invert()
-  const world=new THREE.Vector3(),local=new THREE.Vector3()
-  const ellipse=(x:number,z:number,cx:number,cz:number,rx:number,rz:number,angle:number)=>{
-    const c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dz=z-cz
-    const u=(c*dx+s*dz)/rx,v=(-s*dx+c*dz)/rz
-    return Math.sqrt(u*u+v*v)-1
-  }
-  let changed=false
-  for(let i=0;i<position.count;i++){
-    local.fromBufferAttribute(position,i)
-    world.copy(local).applyMatrix4(mesh.matrixWorld)
-    const x=world.x,z=world.z
-    const lake=Math.min(
-      ellipse(x,z,0,-5,48,26,0),
-      ellipse(x,z,52,-38,40,12,-.4887),
-      ellipse(x,z,30,14,20,13,0),
-      ellipse(x,z,-62,-50,20,5,-.1745)
-    )
-    const onIsland=ellipse(x,z,-14,-10,13,5.5,.1745)<=0
-      ||ellipse(x,z,40,-30,3.2,2.2,-.3491)<=0
-    if(lake<=0&&!onIsland&&world.y>bedLevel){
-      world.y=Math.min(bedLevel,waterLevel-.35)
-      world.applyMatrix4(inverse)
-      position.setXYZ(i,world.x,world.y,world.z)
-      changed=true
-    }
-  }
-  if(changed){
-    position.needsUpdate=true
-    mesh.geometry.computeVertexNormals()
-    mesh.geometry.computeBoundingBox()
-    mesh.geometry.computeBoundingSphere()
-  }
-}
-
-/** Clip the imported rectangular water card to the lake shoreline authored in Blender. */
-function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
-  material.transparent=true
-  material.opacity=.84
-  material.depthWrite=false
-  material.side=THREE.DoubleSide
-  material.onBeforeCompile=(shader)=>{
-    shader.uniforms.uWaterTime={value:0};(material.userData as {waterUniforms?:{value:number}}).waterUniforms=shader.uniforms.uWaterTime
-
-    shader.vertexShader=shader.vertexShader
-      .replace('#include <common>',`#include <common>
-        varying vec3 vImantauWaterWorld;`)
-      .replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
-        vImantauWaterWorld=(modelMatrix*vec4(transformed,1.0)).xyz;`)
-    shader.fragmentShader=shader.fragmentShader
-      .replace('#include <common>',`#include <common>
-        uniform float uWaterTime;
-        varying vec3 vImantauWaterWorld;
-        float imantauEllipse(vec2 p,vec2 center,vec2 radii,float angle){
-          float c=cos(angle),s=sin(angle);
-          vec2 q=p-center;
-          q=vec2(c*q.x+s*q.y,-s*q.x+c*q.y);
-          return length(q/radii)-1.0;
-        }`)
-      .replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
-        vec2 lakeP=vec2(vImantauWaterWorld.x,vImantauWaterWorld.z);
-        float lakeD=min(
-          min(imantauEllipse(lakeP,vec2(0.0,-5.0),vec2(48.0,26.0),0.0),
-              imantauEllipse(lakeP,vec2(52.0,-38.0),vec2(40.0,12.0),-0.4887)),
-          min(imantauEllipse(lakeP,vec2(30.0,14.0),vec2(20.0,13.0),0.0),
-              imantauEllipse(lakeP,vec2(-62.0,-50.0),vec2(20.0,5.0),-0.1745))
-        );
-        if(lakeD>0.0) discard;`)
-      .replace('#include <color_fragment>',`#include <color_fragment>
-        vec3 viewDir=normalize(cameraPosition-vImantauWaterWorld);
-        float fresnel=pow(1.0-max(dot(normalize(vViewPosition),viewDir),0.0),4.0);
-        float waveA=sin(vImantauWaterWorld.x*0.075+uWaterTime*0.55)*0.012;
-        float waveB=cos(vImantauWaterWorld.z*0.061-uWaterTime*0.38)*0.009;
-        vec3 deepWater=vec3(0.055,0.20,0.23);
-        vec3 skyReflection=vec3(0.48,0.62,0.65);
-        diffuseColor.rgb=mix(deepWater,skyReflection,clamp(fresnel*0.72+0.08,0.0,0.8));
-        diffuseColor.rgb+=vec3(waveA+waveB)*0.65;`)
-  }
-  material.customProgramCacheKey=()=> 'imantau-lake-shoreline-fresnel-v2'
-  material.needsUpdate=true
-}
-
 /** Loads the Blender-built scene (tools/blender_build_scene.py). */
 export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.WebGLRenderer):Promise<Landscape> {
   const gltf=await new GLTFLoader().loadAsync(import.meta.env.BASE_URL+'scenes/IMANTAU-real.glb',e=>progress(e.total?e.loaded/e.total:0))
@@ -226,16 +140,14 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
         }
       }
       if(material.name==='Lake_Water'&&material instanceof THREE.MeshStandardMaterial){
-        object.castShadow=false;object.receiveShadow=false;object.renderOrder=1;object.position.y=.02
-        material.envMapIntensity=1.6
-        material.color.set('#b9d8d9')
-        material.metalness=.28;material.roughness=.09
-        material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
-        applyLakeShorelineMask(material)
+        // The water card is sized to the real OSM lake outline in Blender; the terrain (SRTM, carved
+        // in tools/geo_prepare.py) hides it everywhere outside the lake. No shader masking needed.
+        object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
+        material.transparent=true;material.opacity=.9;material.depthWrite=false
+        material.envMapIntensity=1.8;material.metalness=.32;material.roughness=.035
       }
       if(material.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial){
         object.castShadow=false
-        lowerLakeBed(object)
         if(detailTexture)improveTerrainMaterial(object,renderer,detailTexture)
       }
     }

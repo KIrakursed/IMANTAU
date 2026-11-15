@@ -16,22 +16,24 @@ for(const p of places){for(const lang of ['kk','ru'])for(const key of ['title','
 const {Cardboard}=await load('src/viewer/Cardboard.ts')
 let sample=true
 const listeners=new Map()
-globalThis.window={isSecureContext:true,addEventListener(type,fn){listeners.set(type,fn);if(sample)queueMicrotask(()=>fn({alpha:20,beta:90,gamma:0}))},removeEventListener(type){listeners.delete(type)},setTimeout,clearTimeout}
-globalThis.screen={orientation:{angle:90}}
+globalThis.window={isSecureContext:true,screen:{orientation:{angle:90}},addEventListener(type,fn){listeners.set(type,fn);if(sample)queueMicrotask(()=>fn({alpha:20,beta:90,gamma:0}))},removeEventListener(type){listeners.delete(type)},setTimeout,clearTimeout}
+globalThis.screen=globalThis.window.screen
 globalThis.DeviceOrientationEvent=class {static async requestPermission(){return 'granted'}}
 const camera=new THREE.PerspectiveCamera(42,2,.04,250);camera.position.set(23,22,28);camera.lookAt(0,0,-6);camera.updateMatrixWorld()
 const original=camera.position.clone(),originalQuaternion=camera.quaternion.clone()
 const board=new Cardboard(camera)
-assert.equal(await board.start(),true)
-const views=[],eyes=[]
-board.render({setScissorTest(){},setScissor(){},setViewport(...v){views.push(v)},render(scene,eye){eyes.push(eye.matrixWorld.clone())}},new THREE.Scene(),1200,600)
-assert.deepEqual(views,[[0,0,600,600],[600,0,600,600]])
-assert.ok(Math.abs(board.stereo.cameraL.projectionMatrix.elements[0]-board.stereo.cameraL.projectionMatrix.elements[5])<1e-6,'Each eye must have aspect 1 for a 1200x600 viewport')
-assert.ok(eyes[0].elements.some((v,i)=>Math.abs(v-eyes[1].elements[i])>1e-6),'Stereo eye transforms differ')
+const spawn=new THREE.Vector3(130,4,20),look=new THREE.Vector3(42,2,-3)
+assert.equal(await board.start(spawn,look),true)
+assert.ok(camera.position.equals(spawn),'VR starts at the requested ground position')
+// Mobile VR is intentionally ONE full-screen view (project decision), not a split stereo pair.
+const views=[];let renders=0
+board.render({setScissorTest(){},setScissor(){},setViewport(...v){views.push(v)},render(){renders++}},new THREE.Scene(),1200,600)
+assert.deepEqual(views,[[0,0,1200,600]]);assert.equal(renders,1)
 board.recenter();board.stop();assert.equal(board.active,false);assert.equal(listeners.size,0);assert.ok(camera.position.equals(original));assert.ok(camera.quaternion.equals(originalQuaternion));assert.equal(camera.fov,42)
-globalThis.DeviceOrientationEvent.requestPermission=async()=> 'denied';assert.equal(await board.start(),false)
-globalThis.window.isSecureContext=false;assert.equal(await board.start(),false)
-delete globalThis.DeviceOrientationEvent;globalThis.window.isSecureContext=true;assert.equal(await board.start(),false)
+// A refused permission is not final when real samples still arrive (some Android browsers).
+globalThis.DeviceOrientationEvent.requestPermission=async()=> 'denied';assert.equal(await board.start(spawn,look),true);board.stop()
+globalThis.window.isSecureContext=false;assert.equal(await board.start(spawn,look),false)
+delete globalThis.DeviceOrientationEvent;globalThis.window.isSecureContext=true;assert.equal(await board.start(spawn,look),false)
 sample=false
 const {Heightfield}=await load('src/viewer/heightfield.ts')
 const plane=new THREE.PlaneGeometry(100,100,50,50);plane.rotateX(-Math.PI/2)
@@ -41,4 +43,4 @@ assert.ok(Math.abs(field.at(10,3)-1)<1e-4,'bilinear height');assert.equal(field.
 const gazeHit=field.raycast(new THREE.Vector3(0,20,0),new THREE.Vector3(1,-1,0).normalize(),200)
 assert.ok(gazeHit&&Math.abs(gazeHit.x-20/1.1)<.05&&Math.abs(gazeHit.y-gazeHit.x*.1)<.01,'gaze ray hits the ground: '+JSON.stringify(gazeHit))
 assert.equal(field.raycast(new THREE.Vector3(0,20,0),new THREE.Vector3(1,.2,0).normalize(),200),null,'looking up never hits')
-console.log('PASS: URL rules, KK/RU key parity, linked POIs, synthetic sensor permission branches, stereo projection/viewport/eye separation, recenter and camera cleanup, VR gaze heightfield ray.')
+console.log('PASS: URL rules, KK/RU key parity, linked POIs, synthetic sensor permission branches, single full-screen VR viewport, ground spawn, recenter and camera cleanup, VR gaze heightfield ray.')

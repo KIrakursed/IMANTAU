@@ -71,8 +71,11 @@ export class Cardboard {
     try {
       const api = DeviceOrientationEvent as PermissionEvent
       if (typeof api.requestPermission === 'function') {
-        const permission = await api.requestPermission()
-        if (permission !== 'granted' || session !== this.sessionId) return false
+        // A refusal is not final: some browsers expose requestPermission but still deliver
+        // orientation events (or refuse because the tap was already used). We decide below
+        // by whether real sensor samples actually arrive.
+        await api.requestPermission().catch(() => 'denied')
+        if (session !== this.sessionId) return false
       }
 
       if (session !== this.sessionId) return false
