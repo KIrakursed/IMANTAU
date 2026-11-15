@@ -16,7 +16,7 @@ const POSES={
   shore:{position:new THREE.Vector3(176,16,8),target:new THREE.Vector3(30,6,52)},
 }
 export interface MarkerPosition {id:string;x:number;y:number;visible:boolean}
-export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void;gaze?:(progress:number)=>void}
+export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void}
 export class SceneEngine {
   readonly scene=new THREE.Scene()
   readonly camera=new THREE.PerspectiveCamera(42,1,.3,6000)
@@ -27,9 +27,6 @@ export class SceneEngine {
   private root?:THREE.Group
   private mixer?:THREE.AnimationMixer
   private ground?:Heightfield
-  // VR gaze locomotion: look at the ground for GAZE_MS and the viewer glides there.
-  private gazePoint=new THREE.Vector3(1e9,0,0);private gazeDwell=0;private gazeShown=0
-  private walk?:{start:number;from:THREE.Vector3;to:THREE.Vector3}
   private focusedId:string|null=null
   private teleportArmed=true
   private observer:ResizeObserver
@@ -193,7 +190,7 @@ export class SceneEngine {
     }
     return ok
   }
-  stopVR(){this.walk=undefined;this.teleportArmed=true;this.cardboard.stop();this.controls.enabled=true;this.resize()}
+  stopVR(){this.teleportArmed=true;this.cardboard.stop();this.controls.enabled=true;this.resize()}
   private animate=()=>{
     if(this.dead)return
     this.frame=requestAnimationFrame(this.animate)
