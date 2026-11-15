@@ -37,12 +37,12 @@ function paintSky(){
 export function lighting(scene:THREE.Scene, renderer:THREE.WebGLRenderer) {
   renderer.outputColorSpace=THREE.SRGBColorSpace
   renderer.toneMapping=THREE.NeutralToneMapping
-  renderer.toneMappingExposure=1.0
+  renderer.toneMappingExposure=1.08
   renderer.shadowMap.enabled=true
   renderer.shadowMap.type=THREE.PCFSoftShadowMap
   const sky=paintSky()
   // Aerial perspective: distant terrain edges dissolve into the horizon haze, as in the photo.
-  scene.fog=new THREE.Fog('#c6dbef',560,1500)
+  scene.fog=new THREE.Fog('#c6dbef',520,1450)
   // The surveyed area is ~22 x 23 km; beyond it a plain in the region's average colour runs into
   // the haze so the model's edge is not seen as a cliff against the sky.
   const plain=new THREE.Mesh(new THREE.CircleGeometry(4000,64),new THREE.MeshLambertMaterial({color:'#7d9474'}))
@@ -50,12 +50,12 @@ export function lighting(scene:THREE.Scene, renderer:THREE.WebGLRenderer) {
   scene.background=sky;scene.backgroundIntensity=1.0;scene.backgroundBlurriness=.04
   const pmrem=new THREE.PMREMGenerator(renderer)
   const environment=pmrem.fromEquirectangular(sky)
-  scene.environment=environment.texture; scene.environmentIntensity=0.9
+  scene.environment=environment.texture; scene.environmentIntensity=1.05
   pmrem.dispose()
   scene.add(new THREE.HemisphereLight('#cfe1f5','#4d5c3e',0.5))
   const sun=new THREE.DirectionalLight('#fff1d6',2.4)
   sun.position.set(-320,480,220);sun.target.position.set(0,0,-20);scene.add(sun.target);sun.castShadow=true
-  sun.shadow.mapSize.set(4096,4096)
+  sun.shadow.mapSize.set(matchMedia('(pointer:coarse)').matches?2048:4096,matchMedia('(pointer:coarse)').matches?2048:4096)
   Object.assign(sun.shadow.camera,{left:-300,right:300,top:320,bottom:-320,near:20,far:1600})
   sun.shadow.normalBias=0.6;sun.shadow.bias=-0.0004;sun.shadow.radius=2;sun.shadow.intensity=0.72
   scene.add(sun)
