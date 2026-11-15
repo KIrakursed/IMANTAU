@@ -27,6 +27,7 @@ export class SceneEngine {
   private root?:THREE.Group
   private mixer?:THREE.AnimationMixer
   private ground?:Heightfield
+  private runtimeDetail?:THREE.Texture
   private focusedId:string|null=null
   private gazeCandidate?:THREE.Vector3
   private gazeStarted=0
@@ -126,6 +127,7 @@ export class SceneEngine {
       ctx.putImageData(image,0,0)
     }
     const detail=ctx?new THREE.CanvasTexture(detailCanvas):null
+    this.runtimeDetail=detail??undefined
     if(detail){
       detail.wrapS=detail.wrapT=THREE.RepeatWrapping
       detail.colorSpace=THREE.SRGBColorSpace
@@ -499,5 +501,5 @@ export class SceneEngine {
     }
   }
   get stats(){return{...this.renderer.info.memory,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,poiCount:this.targets.size,groundReady:!!this.ground,groundAtLake:this.ground?.at(-12.6,-66)??null}}
-  dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
+  dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.runtimeDetail?.dispose();this.runtimeDetail=undefined;this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
 }
