@@ -206,6 +206,9 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
   const gltf=await new GLTFLoader().loadAsync(import.meta.env.BASE_URL+'scenes/IMANTAU-real.glb',e=>progress(e.total?e.loaded/e.total:0))
   const root=gltf.scene
   root.updateMatrixWorld(true)
+  // Remove legacy standalone blue lake overlay meshes; the animated Lake_Water surface is authoritative.
+  const obsoleteWaterNames=new Set(['Lake_Overlay','Water_Overlay','Lake_Blue_Patch','Water_Patch'])
+  root.traverse(object=>{if(obsoleteWaterNames.has(object.name)){object.removeFromParent();if(object instanceof THREE.Mesh){object.geometry.dispose();for(const m of Array.isArray(object.material)?object.material:[object.material])m.dispose()}}})
   const detailTexture=createCrispDetailTexture(renderer)
   const uses=new Map<string,THREE.Mesh[]>()
   root.traverse(object=>{
