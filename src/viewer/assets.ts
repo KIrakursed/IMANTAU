@@ -20,7 +20,7 @@ function createCrispDetailTexture(renderer:THREE.WebGLRenderer){
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4
     const n=hash(x,y,1),coarse=hash(x>>2,y>>2,2),grain=hash(x*3,y*5,3)
-    const wave=Math.sin((x*0.71+y*0.19)+coarse*5)*.035
+    const wave=Math.sin((x/size*2*Math.PI*7)+(y/size*2*Math.PI*3))*0.035
     const value=.72+n*.18+coarse*.07+grain*.06+wave
     data[i]=Math.min(255,Math.round(112+value*52))
     data[i+1]=Math.min(255,Math.round(118+value*48))
