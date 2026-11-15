@@ -155,7 +155,7 @@ export class SceneEngine {
       const canvas=document.createElement('canvas');canvas.width=512;canvas.height=96
       const ctx=canvas.getContext('2d')!;ctx.fillStyle='#163d32';ctx.fillRect(0,0,512,96);ctx.fillStyle='#fff9e8';ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText(p.number+'  '+p.title[language],256,59)
       const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace
-      const label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));label.position.copy(position).add(new THREE.Vector3(0,5,0));label.scale.set(24,4.5,1);label.visible=false;this.scene.add(label);this.labels.set(p.id,label)
+      const label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,transparent:true,opacity:.62,depthTest:true,depthWrite:false,toneMapped:false}));label.position.copy(position).add(new THREE.Vector3(0,5,0));label.scale.set(12,2.25,1);label.visible=false;this.scene.add(label);this.labels.set(p.id,label)
     }
     this.renderer.domElement.setAttribute('aria-label',language==='kk'?'Имантау интерактивті 3D көрінісі':'Интерактивная 3D-сцена Имантау')
   }
@@ -199,7 +199,17 @@ export class SceneEngine {
     const delta=time-this.previousFrame;this.previousFrame=time;if(delta<250){this.samples.push(delta);if(this.samples.length>90)this.samples.shift()}
     this.mixer?.update(Math.min(delta,100)/1000)
     if(this.transition){const t=Math.min((time-this.transition.start)/1100,1),ease=t*t*(3-2*t);this.camera.position.lerpVectors(this.transition.from,this.transition.to,ease);this.controls.target.lerpVectors(this.transition.targetFrom,this.transition.targetTo,ease);if(t===1)this.transition=undefined}
-    this.labels.forEach(label=>label.visible=this.cardboard.active&&this.annotations)
+    this.labels.forEach((label,id)=>{
+      const distance=label.position.distanceTo(this.camera.position)
+      // Keep the nearest/selected POI clear; labels fade out before they can fill the headset view.
+      const visible=this.cardboard.active&&this.annotations&&id!==this.focusedId&&distance>58&&distance<900
+      label.visible=visible
+      if(visible){
+        const size=THREE.MathUtils.clamp(distance*.035,5.5,15)
+        label.scale.set(size,size*.1875,1)
+        ;(label.material as THREE.SpriteMaterial).opacity=THREE.MathUtils.mapLinear(distance,58,150,.34,.62)
+      }
+    })
     if(this.cardboard.active){
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
       else{this.updateGaze();this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
