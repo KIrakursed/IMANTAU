@@ -1,40 +1,33 @@
-﻿import * as THREE from 'three'
+import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
 const lowPower=()=>matchMedia('(pointer:coarse)').matches||innerWidth<900
 export interface Landscape { root:THREE.Group; mixer:THREE.AnimationMixer }
 
-/** 512px seamless procedural grass/stone albedo. Repeated 180x for close-range sharpness. */
+/** 512px periodic procedural microtexture. Periodic hash avoids seams on all four edges. */
 function createCrispDetailTexture(renderer:THREE.WebGLRenderer){
   const size=512,canvas=document.createElement('canvas')
   canvas.width=size;canvas.height=size
   const ctx=canvas.getContext('2d')
   if(!ctx)return null
   const image=ctx.createImageData(size,size),data=image.data
+  const wrap=(v:number)=>((v%size)+size)%size
   const hash=(x:number,y:number,seed:number)=>{
-    const n=Math.sin(x*127.1+y*311.7+seed*74.7)*43758.5453
+    const xx=wrap(x),yy=wrap(y)
+    const n=Math.sin(xx*127.1+yy*311.7+seed*74.7)*43758.5453
     return n-Math.floor(n)
   }
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4
     const n=hash(x,y,1),coarse=hash(x>>2,y>>2,2),grain=hash(x*3,y*5,3)
-    const blade=Math.max(0,Math.sin((x*0.71+y*0.19)+coarse*5))*0.16
-    const stone=Math.max(0,Math.sin((x*0.13-y*0.31)+n*8))*0.12
-    const value=0.72+n*0.18+coarse*0.07+grain*0.06
-    data[i]=Math.min(255,Math.round(112+value*52+blade*35))
-    data[i+1]=Math.min(255,Math.round(118+value*48+stone*24))
-    data[i+2]=Math.min(255,Math.round(103+value*42+grain*16))
+    const wave=Math.sin((x*0.71+y*0.19)+coarse*5)*.035
+    const value=.72+n*.18+coarse*.07+grain*.06+wave
+    data[i]=Math.min(255,Math.round(112+value*52))
+    data[i+1]=Math.min(255,Math.round(118+value*48))
+    data[i+2]=Math.min(255,Math.round(103+value*42))
     data[i+3]=255
   }
   ctx.putImageData(image,0,0)
-  // Add sparse fine grass/rock strokes; opposite edges remain seamless via wrapped shader sampling.
-  ctx.globalAlpha=.16
-  for(let i=0;i<1800;i++){
-    const x=hash(i,3,7)*size,y=hash(i,9,8)*size
-    ctx.strokeStyle=i%3?'#d4d0a5':'#343c2d'
-    ctx.lineWidth=.5+hash(i,5,9)*1.2
-    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+1.5+hash(i,8,10)*3,y-2+hash(i,4,11)*4);ctx.stroke()
-  }
   const texture=new THREE.CanvasTexture(canvas)
   texture.wrapS=texture.wrapT=THREE.RepeatWrapping
   texture.repeat.set(180,180)
@@ -126,7 +119,7 @@ export function getSafeTeleportPosition(hitPoint:THREE.Vector3,hitNormal?:THREE.
 
 
 /** Lower GLB terrain vertices beneath the water surface inside the lake basin. */
-function lowerLakeBed(mesh:THREE.Mesh,waterLevel=.02,bedLevel=-2.48){
+function lowerLakeBed(mesh:THREE.Mesh,waterLevel=.02,bedLevel=waterLevel-2.5){
   mesh.updateMatrixWorld(true)
   const position=mesh.geometry.getAttribute('position')
   const inverse=mesh.matrixWorld.clone().invert()
@@ -171,6 +164,8 @@ function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
   material.depthWrite=false
   material.side=THREE.DoubleSide
   material.onBeforeCompile=(shader)=>{
+    shader.uniforms.uWaterTime={value:0};(material.userData as {waterUniforms?:{value:number}}).waterUniforms=shader.uniforms.uWaterTime
+
     shader.vertexShader=shader.vertexShader
       .replace('#include <common>',`#include <common>
         varying vec3 vImantauWaterWorld;`)
@@ -178,6 +173,7 @@ function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
         vImantauWaterWorld=(modelMatrix*vec4(transformed,1.0)).xyz;`)
     shader.fragmentShader=shader.fragmentShader
       .replace('#include <common>',`#include <common>
+        uniform float uWaterTime;
         varying vec3 vImantauWaterWorld;
         float imantauEllipse(vec2 p,vec2 center,vec2 radii,float angle){
           float c=cos(angle),s=sin(angle);
@@ -195,9 +191,16 @@ function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
         );
         if(lakeD>0.0) discard;`)
       .replace('#include <color_fragment>',`#include <color_fragment>
-        diffuseColor.rgb*=vec3(0.82,0.94,0.96);`)
+        vec3 viewDir=normalize(cameraPosition-vImantauWaterWorld);
+        float fresnel=pow(1.0-max(dot(normalize(normal),viewDir),0.0),4.0);
+        float waveA=sin(vImantauWaterWorld.x*0.075+uWaterTime*0.55)*0.012;
+        float waveB=cos(vImantauWaterWorld.z*0.061-uWaterTime*0.38)*0.009;
+        vec3 deepWater=vec3(0.055,0.20,0.23);
+        vec3 skyReflection=vec3(0.48,0.62,0.65);
+        diffuseColor.rgb=mix(deepWater,skyReflection,clamp(fresnel*0.72+0.08,0.0,0.8));
+        diffuseColor.rgb+=vec3(waveA+waveB)*0.65;`)
   }
-  material.customProgramCacheKey=()=> 'imantau-lake-shoreline-mask-v1'
+  material.customProgramCacheKey=()=> 'imantau-lake-shoreline-fresnel-v2'
   material.needsUpdate=true
 }
 
@@ -224,8 +227,9 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
       }
       if(material.name==='Lake_Water'&&material instanceof THREE.MeshStandardMaterial){
         object.castShadow=false;object.receiveShadow=false;object.renderOrder=1;object.position.y=.02
-        material.envMapIntensity=1.35
-        material.metalness=.12;material.roughness=.12
+        material.envMapIntensity=1.6
+        material.color.set('#b9d8d9')
+        material.metalness=.28;material.roughness=.09
         material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
         applyLakeShorelineMask(material)
       }
@@ -250,8 +254,12 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
     if(lowPower())instance.count=Math.ceil(meshes.length*.8)
     instance.instanceMatrix.needsUpdate=true;instance.computeBoundingSphere();root.add(instance)
   }
-  // Water waves: only the shape-key (morph weight) clip from the provided water asset.
+  // Water waves: animate the imported morph mesh and a subtle shader ripple clock.
   const mixer=new THREE.AnimationMixer(root)
+  const waterMaterials:THREE.MeshStandardMaterial[]=[]
+  root.traverse(o=>{if(o instanceof THREE.Mesh){for(const m of Array.isArray(o.material)?o.material:[o.material])if(m instanceof THREE.MeshStandardMaterial&&m.name==='Lake_Water')waterMaterials.push(m)}})
+  let waterTime=0
+  mixer.addEventListener('update',event=>{waterTime+=Number(event.delta??0);for(const material of waterMaterials){const uniforms=(material as THREE.MeshStandardMaterial & {userData:{waterUniforms?:{value:number}}}).userData.waterUniforms;if(uniforms)uniforms.value=waterTime}})
   for(const clip of gltf.animations){
     if(!clip.tracks.every(track=>track.name.endsWith('.morphTargetInfluences')))continue
     const action=mixer.clipAction(clip);action.timeScale=.45;action.play()
