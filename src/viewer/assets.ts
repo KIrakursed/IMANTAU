@@ -192,7 +192,7 @@ function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
         if(lakeD>0.0) discard;`)
       .replace('#include <color_fragment>',`#include <color_fragment>
         vec3 viewDir=normalize(cameraPosition-vImantauWaterWorld);
-        float fresnel=pow(1.0-max(dot(normalize(normal),viewDir),0.0),4.0);
+        float fresnel=pow(1.0-max(dot(normalize(vViewPosition),viewDir),0.0),4.0);
         float waveA=sin(vImantauWaterWorld.x*0.075+uWaterTime*0.55)*0.012;
         float waveB=cos(vImantauWaterWorld.z*0.061-uWaterTime*0.38)*0.009;
         vec3 deepWater=vec3(0.055,0.20,0.23);
