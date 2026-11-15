@@ -1,0 +1,16 @@
+{
+  "sourceSha256": "72c351db1b9048724042a586b4d725511de1bc8693160f82e90242af50a4b203",
+  "originalGlbSha256": "10fae5cd5f7eb04b27698bac046e77161c52ff9865b6a0c5d8015a51946dfab6",
+  "restoredSha256": "180f9bc1e74687483564fbe296bc272198332a0097713e8379e5e239d19d7489",
+  "matchedShoreVertices": 32761,
+  "sourceShoreTriangles": 64800,
+  "glbShoreTriangles": 64800,
+  "sourceMeshInstances": 1582,
+  "glbMeshInstances": 1582,
+  "sourceAxis": "Z",
+  "webAxis": "Y",
+  "conversion": "(x, y, z) \u2192 (x, z, -y)",
+  "originalBytes": 24873700,
+  "restoredBytes": 28035152,
+  "preserved": "All original binary buffers, transforms, normals, other materials and original UVs. Source images copied byte-for-byte. No generated replacement textures."
+}

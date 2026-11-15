@@ -1,0 +1,217 @@
+{
+  "originalBinaryPreserved": true,
+  "originalNodesTransformsPreserved": true,
+  "originalAccessorsPreserved": true,
+  "sourceTriangles": 785064,
+  "glbTriangles": 785064,
+  "normalCount": 202919,
+  "normalLengthMin": 0.9999999124407474,
+  "normalLengthMax": 1.0000001417056972,
+  "originalImagesMatchingSourcePixels": [
+    {
+      "name": "normal",
+      "source": [
+        "textures/object_0001_texture_normal.png"
+      ]
+    },
+    {
+      "name": "diffuse",
+      "source": [
+        "textures/object_0001_texture_diffuse.png"
+      ]
+    },
+    {
+      "name": "normal",
+      "source": [
+        "textures/object_0002_texture_normal.png"
+      ]
+    },
+    {
+      "name": "diffuse",
+      "source": [
+        "textures/object_0002_texture_diffuse.png"
+      ]
+    },
+    {
+      "name": "normal",
+      "source": [
+        "textures/object_0003_texture_normal.png"
+      ]
+    },
+    {
+      "name": "diffuse",
+      "source": [
+        "textures/object_0003_texture_diffuse.png"
+      ]
+    },
+    {
+      "name": "normal",
+      "source": [
+        "textures/object_0004_texture_normal.png"
+      ]
+    },
+    {
+      "name": "diffuse",
+      "source": [
+        "textures/object_0004_texture_diffuse.png"
+      ]
+    },
+    {
+      "name": "normal",
+      "source": [
+        "textures/object_0005_texture_normal.png"
+      ]
+    },
+    {
+      "name": "diffuse",
+      "source": [
+        "textures/object_0005_texture_diffuse.png"
+      ]
+    },
+    {
+      "name": "Blue Lake_material_ripples",
+      "source": [
+        "textures/Blue Lake_material_ripples.png"
+      ]
+    },
+    {
+      "name": "Blue Lake_material_roughness",
+      "source": [
+        "textures/Blue Lake_material_roughness.png"
+      ]
+    },
+    {
+      "name": "lake_basin_ground_material_nor_gl",
+      "source": [
+        "textures/lake_basin_ground_material_nor_gl.png"
+      ]
+    },
+    {
+      "name": "lake_basin_ground_material_Diffuse",
+      "source": [
+        "textures/lake_basin_ground_material_Diffuse.png"
+      ]
+    },
+    {
+      "name": "lake_basin_ground_material_Rough",
+      "source": [
+        "textures/lake_basin_ground_material_Rough.png"
+      ]
+    },
+    {
+      "name": "mountain_foot_ground_material_nor_gl",
+      "source": [
+        "textures/mountain_foot_ground_material_nor_gl.png"
+      ]
+    },
+    {
+      "name": "mountain_foot_ground_material_Diffuse",
+      "source": [
+        "textures/mountain_foot_ground_material_Diffuse.png"
+      ]
+    },
+    {
+      "name": "mountain_foot_ground_material_Rough",
+      "source": [
+        "textures/mountain_foot_ground_material_Rough.png"
+      ]
+    },
+    {
+      "name": "normal",
+      "source": [
+        "textures/object_0000_texture_normal.png"
+      ]
+    },
+    {
+      "name": "diffuse",
+      "source": [
+        "textures/object_0000_texture_diffuse.png"
+      ]
+    },
+    {
+      "name": "Pine_Leaves",
+      "source": [
+        "textures/Pine_Leaves.png",
+        "textures/Pine_Leaves.002.png",
+        "textures/Pine_Leaves.001.png"
+      ]
+    },
+    {
+      "name": "Tree_Bark",
+      "source": [
+        "textures/Tree_Bark.png",
+        "textures/Tree_Bark.002.png",
+        "textures/Tree_Bark.001.png"
+      ]
+    }
+  ],
+  "convertedOrPackedImages": [
+    {
+      "name": "orm",
+      "source": null
+    },
+    {
+      "name": "orm",
+      "source": null
+    },
+    {
+      "name": "orm",
+      "source": null
+    },
+    {
+      "name": "orm",
+      "source": null
+    },
+    {
+      "name": "orm",
+      "source": null
+    },
+    {
+      "name": "Blue Lake_material_depth",
+      "source": null
+    },
+    {
+      "name": "orm",
+      "source": null
+    }
+  ],
+  "sourceCustomProperties": {
+    "userProperties:source_assets": [
+      "aerial-grass,dirt-ground",
+      "coast-sand,dirt-ground"
+    ],
+    "userProperties:terrain_layer_coverage": [
+      "ground:0.829,soil:0.171,rock:0.000,snow:0.000",
+      "ground:0.903,soil:0.097,rock:0.000,snow:0.000"
+    ],
+    "userProperties:terrain_material_seconds": [
+      "0.713",
+      "6.409"
+    ],
+    "userProperties:terrain_preset": [
+      "grassland",
+      "sand"
+    ],
+    "userProperties:terrain_style": [
+      "realistic"
+    ],
+    "userProperties:terrain_surface_version": [
+      "2"
+    ],
+    "userProperties:water_absorption_distance": [
+      "0.5"
+    ],
+    "userProperties:water_max_depth": [
+      "0.5947530269622803"
+    ],
+    "userProperties:water_preset": [
+      "lake"
+    ],
+    "userProperties:water_style": [
+      "realistic"
+    ],
+    "userProperties:water_surface_version": [
+      "2"
+    ]
+  }
+}

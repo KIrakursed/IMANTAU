@@ -1,0 +1,52 @@
+{
+  "source": "IMANTAU-restored.glb",
+  "bakes": [
+    {
+      "object": "Forested Shore",
+      "uv": "UVMap.001",
+      "size": 4096,
+      "authoredWeight": 0.3,
+      "shoreline": true,
+      "bakeSeconds": 19.5,
+      "png": "C:\\Users\\ertai\\Desktop\\IMANTAU\\work\\blender\\Forested_Shore_basecolor.png"
+    },
+    {
+      "object": "mountain_foot_ground",
+      "uv": "UVMap",
+      "size": 2048,
+      "authoredWeight": 0.12,
+      "shoreline": false,
+      "bakeSeconds": 4.0,
+      "png": "C:\\Users\\ertai\\Desktop\\IMANTAU\\work\\blender\\mountain_foot_ground_basecolor.png"
+    }
+  ],
+  "needleTint": [
+    {
+      "material": "Vegetation_Tint_17fd7afbb47058d9",
+      "tint": "#5b8a52"
+    },
+    {
+      "material": "Vegetation_Tint_739cc587339e4b64",
+      "tint": "#4d7d4f"
+    },
+    {
+      "material": "Vegetation_Tint_a8b84c418e2b74be",
+      "tint": "#66905a"
+    }
+  ],
+  "mountain": {
+    "object": "Mesh",
+    "size": 2048
+  },
+  "water": {
+    "attenuationColor": "#2a6fc0",
+    "attenuationDistance": 0.6
+  },
+  "forest": {
+    "sourcePines": 780,
+    "addedPines": 1941,
+    "seed": 7
+  },
+  "output": "public\\scenes\\IMANTAU-enhanced.glb",
+  "outputBytes": 19670172
+}

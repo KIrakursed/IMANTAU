@@ -1,0 +1,11 @@
+﻿node_modules/
+dist/
+*.tsbuildinfo
+.env.local
+.env.*.local
+*.usdz
+*.blend
+*.blend1
+work/diagnostics/textures/
+work/blender/*.png
+work/qa/
