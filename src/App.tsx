@@ -28,14 +28,13 @@ export default function App(){
   const [ready,setReady]=useState(false),[failed,setFailed]=useState(false),[progress,setProgress]=useState(0),[attempt,setAttempt]=useState(0)
   const [dialog,setDialog]=useState<Dialog>(()=>stored('imantau-museum-intro')?null:'intro')
   const [annotations,setAnnotations]=useState(true),[explorer,setExplorer]=useState(false),[vr,setVr]=useState(false),[vrBusy,setVrBusy]=useState(false)
-  const [gaze,setGaze]=useState(0)
   const [vrError,setVrError]=useState<'vrFallback'|'vrSecure'|'sensorStopped'|null>(null),[images,setImages]=useState<string[]>([])
   const selectedPlace=places.find(p=>p.id===selected)
   const closeDialog=()=>{if(dialog==='intro')save('imantau-museum-intro','1');if(dialog==='vr'&&vrBusy){engine.current?.stopVR();setVrBusy(false)}setDialog(null)}
   useEffect(()=>{
     if(!host.current)return
     setFailed(false);setReady(false);setProgress(0)
-    try{engine.current=new SceneEngine(host.current,{progress:setProgress,ready:()=>setReady(true),error:()=>setFailed(true),markers:setMarkers,gallery:setImages,sensorStopped:()=>{setVr(false);setVrError('sensorStopped');setDialog('vr')},gaze:setGaze})}catch(error){console.error(error);setFailed(true)}
+    try{engine.current=new SceneEngine(host.current,{progress:setProgress,ready:()=>setReady(true),error:()=>setFailed(true),markers:setMarkers,gallery:setImages,sensorStopped:()=>{setVr(false);setVrError('sensorStopped');setDialog('vr')}})}catch(error){console.error(error);setFailed(true)}
     return()=>{engine.current?.dispose();engine.current=null}
   },[attempt])
   useEffect(()=>{document.documentElement.lang=language;document.title=copy[language].pageTitle;save('imantau-language',language);engine.current?.setLanguage(language)},[language,ready])
@@ -60,7 +59,7 @@ export default function App(){
     if(ok){setVr(true);setDialog(null);setSelected(null)}
     else{setVrError('vrFallback');try{screen.orientation.unlock?.()}catch{/* ignore */}if(document.fullscreenElement)void document.exitFullscreen().catch(()=>{})}
   }
-  function exitVR(){engine.current?.stopVR();setVr(false);setGaze(0);try{screen.orientation.unlock?.()}catch{/* ignore */}if(document.fullscreenElement)void document.exitFullscreen().catch(()=>{})}
+  function exitVR(){engine.current?.stopVR();setVr(false);try{screen.orientation.unlock?.()}catch{/* ignore */}if(document.fullscreenElement)void document.exitFullscreen().catch(()=>{})}
   return <div className={`museum ${vr?'is-vr':''} ${selected?'has-panel':''}`} ref={app}>
     <div className="scene-host" ref={host}/>
     {!vr&&<><header className="topbar"><button className="brand" onClick={()=>{setSelected(null);preset('reset')}} aria-label="IMANTAU"><span className="brand-symbol"><Layers size={24}/></span><span>IMANTAU<small>{t.atlas}</small></span></button><nav aria-label={t.explore}><button className={selected==='lake'?'active':''} disabled={!ready} onClick={()=>select('lake')}>{t.overview}</button><button onClick={()=>{setExplorer(!explorer);setSelected(null)}} className={explorer?'active':''}>{t.explore}<ArrowUpRight size={15}/></button></nav><div className="top-actions"><div className="language" aria-label="Қазақша / Русский">{(['kk','ru'] as const).map(l=><button key={l} aria-pressed={l===language} onClick={()=>setLanguage(l)}>{l==='kk'?'ҚАЗ':'РУС'}</button>)}</div><button className="icon help-button" aria-label={t.help} title={t.help} onClick={()=>setDialog('help')}><HelpCircle size={19}/></button><button className="icon share-button" aria-label={t.share} title={t.share} onClick={()=>setDialog('share')}><Share2 size={18}/></button></div></header>
@@ -72,7 +71,7 @@ export default function App(){
     <footer className="bottom-bar"><div className="view-label"><Compass size={24}/><span>{t.model}<small>{t.placeCount}</small></span></div><div className="camera-presets" aria-label={t.view}><button disabled={!ready} onClick={()=>{setSelected(null);preset('reset')}}><RotateCcw size={15}/>{t.reset}</button><button disabled={!ready} onClick={()=>preset('aerial')}>{t.aerial}</button><button disabled={!ready} onClick={()=>preset('shore')}>{t.shore}</button></div><button className="vr-button" disabled={!ready} onClick={()=>{setVrError(null);setDialog('vr')}}><Glasses size={20}/>{t.vr}<ArrowUpRight size={15}/></button></footer>
     <div className="interaction-hint"><MousePointer2 size={13}/>{t.rotate}<span>·</span>{t.zoom}<span>·</span>{t.select}</div></>}
     {(!ready||failed)&&<div className="loading" role={failed?'alert':'status'}><span className="eyebrow">IMANTAU / 3D</span><h2>{failed?t.error:t.loading}</h2>{!failed&&<><p>{t.loadingNote}</p><div className="progress"><i style={{width:Math.max(3,progress*100)+'%'}}/></div><span>{Math.round(progress*100)}%</span></>}{failed&&<button onClick={()=>setAttempt(a=>a+1)}>{t.retry}</button>}</div>}
-    {vr&&<><div className="vr-reticle" style={{'--gaze':gaze} as unknown as import('react').CSSProperties}/><div className="vr-gaze-hint">{t.vrGaze}</div><div className="vr-landscape">{t.vrLandscape}</div><div className="vr-controls"><button onClick={()=>engine.current?.cardboard.recenter()}><ScanLine size={18}/>{t.vrAlign}</button><button onClick={exitVR}><X size={18}/>{t.vrExit}</button></div></>}
+    {vr&&<><div className="vr-reticle"/><div className="vr-gaze-hint">{t.vrGaze}</div><div className="vr-landscape">{t.vrLandscape}</div><div className="vr-controls"><button onClick={()=>engine.current?.cardboard.recenter()}><ScanLine size={18}/>{t.vrAlign}</button><button onClick={exitVR}><X size={18}/>{t.vrExit}</button></div></>}
     {(dialog==='intro'||dialog==='help')&&<Modal title={t.intro} t={t} onClose={closeDialog}><p>{t.introText}</p><div className="help-steps"><div><Move/><strong>{t.rotate}</strong><p>{t.mouse}</p></div><div><MousePointer2/><strong>{t.zoom}</strong><p>{t.touch}</p></div><div><MapPin/><strong>{t.select}</strong><p>{t.keyboard}</p></div><div><Glasses/><strong>{t.vr}</strong><p>{t.vrIntro}</p></div></div><button className="primary" onClick={closeDialog}>{dialog==='intro'?t.start:t.close}<ArrowUpRight size={18}/></button>{dialog==='intro'&&<button className="text-button" onClick={closeDialog}>{t.skip}</button>}</Modal>}
     {dialog==='share'&&<ShareDialog t={t} onClose={closeDialog}/>}
     {dialog==='vr'&&<Modal title={t.vrTitle} t={t} onClose={closeDialog}><div className="vr-illustration"><Glasses size={70}/><AudioLines size={30}/></div><p>{t.vrIntro}</p><p className="caption">{t.vrNote}</p>{vrError&&<p className="error" role="alert">{t[vrError]}</p>}<button className="primary" disabled={vrBusy||!ready} onClick={()=>void startVR()}>{vrBusy?t.vrWait:t.vrStart}<Glasses size={20}/></button></Modal>}
