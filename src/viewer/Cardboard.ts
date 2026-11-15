@@ -2,7 +2,6 @@ import * as THREE from 'three'
 type PermissionEvent = typeof DeviceOrientationEvent & {requestPermission?:()=>Promise<string>}
 export class Cardboard {
   active=false
-  readonly stereo=new THREE.StereoCamera()
   private raw=new THREE.Quaternion()
   private correction=new THREE.Quaternion()
   private euler=new THREE.Euler()
@@ -14,7 +13,7 @@ export class Cardboard {
   private savedQuaternion=new THREE.Quaternion()
   private savedFov=42
   private pending:((value:boolean)=>void)|null=null
-  constructor(private camera:THREE.PerspectiveCamera) { this.stereo.aspect=.5; this.stereo.eyeSep=.064 }
+  constructor(private camera:THREE.PerspectiveCamera) {}
   private onOrientation=(event:DeviceOrientationEvent)=>{
     if(event.alpha===null||event.beta===null||event.gamma===null)return
     const rad=THREE.MathUtils.degToRad
@@ -47,20 +46,13 @@ export class Cardboard {
   }
   render(renderer:THREE.WebGLRenderer,scene:THREE.Scene,width:number,height:number){
     this.camera.quaternion.copy(this.correction).multiply(this.raw)
-    this.camera.aspect=width/height;this.camera.updateProjectionMatrix();this.camera.updateMatrixWorld(true)
-    this.stereo.update(this.camera)
-    // Split at an integer CSS-pixel boundary. A fractional width/2 can be rounded
-    // differently by WebGL at non-integer device pixel ratios, leaving a black seam.
-    const leftWidth=Math.floor(width/2)
-    const rightWidth=width-leftWidth
-    renderer.setScissorTest(true)
-    renderer.setScissor(0,0,leftWidth,height)
-    renderer.setViewport(0,0,leftWidth,height)
-    renderer.render(scene,this.stereo.cameraL)
-    renderer.setScissor(leftWidth,0,rightWidth,height)
-    renderer.setViewport(leftWidth,0,rightWidth,height)
-    renderer.render(scene,this.stereo.cameraR)
+    this.camera.aspect=width/height
+    this.camera.updateProjectionMatrix()
+    this.camera.updateMatrixWorld(true)
+    // Render one full-width view instead of side-by-side Cardboard stereo eyes.
     renderer.setScissorTest(false)
+    renderer.setViewport(0,0,width,height)
+    renderer.render(scene,this.camera)
   }
   get stale(){return this.active&&performance.now()-this.latest>6000}
   stop(){
