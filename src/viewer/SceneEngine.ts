@@ -33,6 +33,7 @@ export class SceneEngine {
   private readonly gazeDuration=1600
   private readonly maxStepDistance=25
   private readonly eyeHeight=2.6
+  private fogColor=new THREE.Color('#c8d5d4')
   private vrMove?:{start:number;duration:number;from:THREE.Vector3;to:THREE.Vector3}
   private vrEnteredAt=0
   private readonly vrHintDuration=3000
@@ -65,6 +66,7 @@ export class SceneEngine {
     this.controls.update()
     this.cardboard=new Cardboard(this.camera)
     this.cleanupLighting=lighting(this.scene,this.renderer)
+    this.scene.fog=new THREE.FogExp2(this.fogColor,0.00072)
     this.ring=new THREE.Mesh(new THREE.RingGeometry(.94,1,64),new THREE.MeshBasicMaterial({color:'#f8f0bd',side:THREE.DoubleSide,depthTest:false,transparent:true,opacity:.7}))
     this.ring.rotation.x=-Math.PI/2;this.ring.visible=false;this.ring.renderOrder=10;this.scene.add(this.ring)
     this.observer=new ResizeObserver(this.resize);this.observer.observe(host);this.resize()
@@ -81,7 +83,11 @@ export class SceneEngine {
       if(this.dead){disposeScene(root);return}
       this.root=root;this.mixer=mixer;
       const terrain=root.getObjectByName('Terrain');const terrainMesh=terrain instanceof THREE.Mesh?terrain:terrain?.children.find(c=>c instanceof THREE.Mesh) as THREE.Mesh|undefined
-      if(terrainMesh)this.ground=new Heightfield(terrainMesh)
+      if(terrainMesh){
+        // Softly taper the outer terrain boundary to the fog colour rather than a hard square edge.
+        this.featherTerrainPerimeter(terrainMesh)
+        this.ground=new Heightfield(terrainMesh)
+      }
       this.scene.add(root);root.updateMatrixWorld(true)
       for(const p of places){
         const node=root.getObjectByName(p.node)??root.getObjectByName(p.node.replaceAll('_',' '))
@@ -95,6 +101,19 @@ export class SceneEngine {
       }
       this.setLanguage(this.language);this.captureGallery();this.renderer.shadowMap.autoUpdate=false;this.preset('reset');this.cb.ready()
     }catch(error){console.error('Landscape loading failed',error);if(!this.dead)this.cb.error()}
+  }
+  private featherTerrainPerimeter(mesh:THREE.Mesh){
+    const position=mesh.geometry.getAttribute('position') as THREE.BufferAttribute
+    const box=mesh.geometry.boundingBox??(mesh.geometry.computeBoundingBox(),mesh.geometry.boundingBox!)
+    const spanX=box.max.x-box.min.x,spanZ=box.max.z-box.min.z
+    const feather=Math.min(spanX,spanZ)*.055
+    const x=new THREE.Vector3()
+    for(let i=0;i<position.count;i++){
+      x.fromBufferAttribute(position,i)
+      const edge=Math.min(x.x-box.min.x,box.max.x-x.x,x.z-box.min.z,box.max.z-x.z)
+      if(edge<feather){const t=THREE.MathUtils.smoothstep(edge,0,feather);const target=-1.8;position.setY(i,THREE.MathUtils.lerp(target,x.y,t))}
+    }
+    position.needsUpdate=true;mesh.geometry.computeVertexNormals();mesh.geometry.computeBoundingBox();mesh.geometry.computeBoundingSphere()
   }
   private captureGallery(){
     const old=this.camera.position.clone(),target=this.controls.target.clone()
