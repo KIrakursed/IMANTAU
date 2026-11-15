@@ -254,12 +254,8 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
     if(lowPower())instance.count=Math.ceil(meshes.length*.8)
     instance.instanceMatrix.needsUpdate=true;instance.computeBoundingSphere();root.add(instance)
   }
-  // Water waves: animate the imported morph mesh and a subtle shader ripple clock.
+  // Keep the source morph animation intact. SceneEngine updates the shader clock each frame.
   const mixer=new THREE.AnimationMixer(root)
-  const waterMaterials:THREE.MeshStandardMaterial[]=[]
-  root.traverse(o=>{if(o instanceof THREE.Mesh){for(const m of Array.isArray(o.material)?o.material:[o.material])if(m instanceof THREE.MeshStandardMaterial&&m.name==='Lake_Water')waterMaterials.push(m)}})
-  let waterTime=0
-  mixer.addEventListener('update',event=>{waterTime+=Number(event.delta??0);for(const material of waterMaterials){const uniforms=(material as THREE.MeshStandardMaterial & {userData:{waterUniforms?:{value:number}}}).userData.waterUniforms;if(uniforms)uniforms.value=waterTime}})
   for(const clip of gltf.animations){
     if(!clip.tracks.every(track=>track.name.endsWith('.morphTargetInfluences')))continue
     const action=mixer.clipAction(clip);action.timeScale=.45;action.play()
