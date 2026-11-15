@@ -318,14 +318,13 @@ export class SceneEngine {
     const ease=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2
     const x=THREE.MathUtils.lerp(move.from.x,move.to.x,ease)
     const z=THREE.MathUtils.lerp(move.from.z,move.to.z,ease)
-    const terrain=this.ground.at(x,z)
-    if(terrain===null){
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.5)
+    if(safeY===null){
       this.vrMove=undefined
       this.resetGaze()
       return
     }
-    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.5)
-    this.camera.position.set(x,safeY??terrain+this.eyeHeight,z)
+    this.camera.position.set(x,safeY,z)
     this.camera.updateMatrixWorld(true)
     if(t>=1){
       const finalY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,move.to.x,move.to.z,this.eyeHeight,1.5)
