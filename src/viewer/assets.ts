@@ -14,7 +14,7 @@ export async function loadLandscape(progress:(n:number)=>void):Promise<Landscape
     if(!(object instanceof THREE.Mesh))return
     const material=object.material as THREE.MeshStandardMaterial
     object.castShadow=true;object.receiveShadow=true
-    if(material.map)material.map.anisotropy=8
+    if(material.map)material.map.anisotropy=12
     if(material.name==='Lake_Water'){
       // Semi-transparent so the sandy shallows read turquoise, like the reference beach cove.
       object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
@@ -34,7 +34,7 @@ export async function loadLandscape(progress:(n:number)=>void):Promise<Landscape
     instance.name=meshes[0].name.replace(/_\d+$/,'')+'_instances';instance.castShadow=true;instance.receiveShadow=true
     meshes.forEach((mesh,i)=>{instance.setMatrixAt(i,mesh.matrixWorld);mesh.removeFromParent()})
     // Phones draw a random half of the forest (instances are stored in random order).
-    if(lowPower())instance.count=Math.ceil(meshes.length*.5)
+    if(lowPower())instance.count=Math.ceil(meshes.length*.8)
     instance.instanceMatrix.needsUpdate=true;instance.computeBoundingSphere();root.add(instance)
   }
   // Water waves: only the shape-key (morph weight) clip from the provided water asset.
