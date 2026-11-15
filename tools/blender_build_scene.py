@@ -185,6 +185,13 @@ STEP = 1.2
 xs = np.arange(X0, X1 + 1e-3, STEP, dtype=np.float32); ys = np.arange(Y0, Y1 + 1e-3, STEP, dtype=np.float32)
 GX, GY = np.meshgrid(xs, ys)
 H, *_ = fields(GX, GY)
+# Keep the terrain mesh safely below the water plane inside the lake basin.
+# Preserve the two authored islands above water; the shoreline itself remains governed by lake_sdf.
+lake_d = lake_sdf(GX, GY)
+island_d = ellipse_sdf(GX, GY, *ISLAND)
+islet_d = ellipse_sdf(GX, GY, *ISLET)
+underwater = (lake_d <= 0.0) & (island_d > 0.0) & (islet_d > 0.0)
+H = np.where(underwater, np.minimum(H, -0.35), H).astype(np.float32)
 nx, ny = len(xs), len(ys)
 verts = np.stack([GX.ravel(), GY.ravel(), H.ravel()], 1)
 idx = np.arange(nx * ny).reshape(ny, nx)
