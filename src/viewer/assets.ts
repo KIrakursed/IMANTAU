@@ -124,6 +124,46 @@ export function getSafeTeleportPosition(hitPoint:THREE.Vector3,hitNormal?:THREE.
 }
 
 
+
+/** Lower GLB terrain vertices beneath the water surface inside the lake basin. */
+function lowerLakeBed(mesh:THREE.Mesh,waterLevel=.02,bedLevel=-.35){
+  mesh.updateMatrixWorld(true)
+  const position=mesh.geometry.getAttribute('position')
+  const inverse=mesh.matrixWorld.clone().invert()
+  const world=new THREE.Vector3(),local=new THREE.Vector3()
+  const ellipse=(x:number,z:number,cx:number,cz:number,rx:number,rz:number,angle:number)=>{
+    const c=Math.cos(angle),s=Math.sin(angle),dx=x-cx,dz=z-cz
+    const u=(c*dx+s*dz)/rx,v=(-s*dx+c*dz)/rz
+    return Math.sqrt(u*u+v*v)-1
+  }
+  let changed=false
+  for(let i=0;i<position.count;i++){
+    local.fromBufferAttribute(position,i)
+    world.copy(local).applyMatrix4(mesh.matrixWorld)
+    const x=world.x,z=world.z
+    const lake=Math.min(
+      ellipse(x,z,0,-5,48,26,0),
+      ellipse(x,z,52,-38,40,12,-.4887),
+      ellipse(x,z,30,14,20,13,0),
+      ellipse(x,z,-62,-50,20,5,-.1745)
+    )
+    const onIsland=ellipse(x,z,-14,-10,13,5.5,.1745)<=0
+      ||ellipse(x,z,40,-30,3.2,2.2,-.3491)<=0
+    if(lake<=0&&!onIsland&&world.y>bedLevel){
+      world.y=Math.min(bedLevel,waterLevel-.35)
+      world.applyMatrix4(inverse)
+      position.setXYZ(i,world.x,world.y,world.z)
+      changed=true
+    }
+  }
+  if(changed){
+    position.needsUpdate=true
+    mesh.geometry.computeVertexNormals()
+    mesh.geometry.computeBoundingBox()
+    mesh.geometry.computeBoundingSphere()
+  }
+}
+
 /** Clip the imported rectangular water card to the lake shoreline authored in Blender. */
 function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
   material.transparent=true
@@ -174,7 +214,7 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
     const materials=Array.isArray(object.material)?object.material:[object.material]
     for(const material of materials){
       if(material instanceof THREE.MeshStandardMaterial&&material.map){
-        material.map.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower()?4:12)
+        material.map.anisotropy=renderer.capabilities.getMaxAnisotropy()
       }
       if(material.name==='Lake_Water'&&material instanceof THREE.MeshStandardMaterial){
         object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
@@ -185,6 +225,7 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
       }
       if(material.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial){
         object.castShadow=false
+        lowerLakeBed(object)
         if(detailTexture)improveTerrainMaterial(object,renderer,detailTexture)
       }
     }
