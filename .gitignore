@@ -13,3 +13,9 @@ work/qa/
 # Third-party source assets (pine, water): licence unknown, kept local
 assets/source/
 .claude/
+
+# Downloaded / derived geodata (re-create with tools/geo_fetch.sh + tools/geo_prepare.py)
+work/geo/raw/
+work/geo/sat_z14.jpg
+work/geo/dem_z13.npy
+work/geo/prepared/

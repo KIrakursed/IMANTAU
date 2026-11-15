@@ -4,24 +4,32 @@ import { places, type Language } from '../data/content'
 import { lighting } from './lighting'
 import { loadLandscape, disposeScene } from './assets'
 import { Cardboard } from './Cardboard'
+import { Heightfield } from './heightfield'
 /** Camera poses (three.js Y-up). 'reset' mirrors the reference photo: high, from the south shore,
  *  looking across the lake to the mountain. */
 const POSES={
-  reset:{position:new THREE.Vector3(14,52,124),target:new THREE.Vector3(4,22,-110)},
-  aerial:{position:new THREE.Vector3(6,270,-8),target:new THREE.Vector3(6,0,-22)},
-  shore:{position:new THREE.Vector3(30,7,25),target:new THREE.Vector3(-14,4,-12)},
+  // Real geography (1 unit = 40 m, +x east, -z north). From the north end of the lake looking
+  // south-south-west across the water to the Imantau massif — the reference-photo composition.
+  reset:{position:new THREE.Vector3(-70,140,-350),target:new THREE.Vector3(14,62,40)},
+  aerial:{position:new THREE.Vector3(-6,720,-36),target:new THREE.Vector3(-6,0,-34)},
+  // From the shore by Imantau village (SE) towards Kazachy Island and the mountain.
+  shore:{position:new THREE.Vector3(176,16,8),target:new THREE.Vector3(30,6,52)},
 }
 export interface MarkerPosition {id:string;x:number;y:number;visible:boolean}
-export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void}
+export interface ViewerCallbacks {progress:(n:number)=>void;ready:()=>void;error:()=>void;markers:(m:MarkerPosition[])=>void;sensorStopped:()=>void;gallery:(images:string[])=>void;gaze?:(progress:number)=>void}
 export class SceneEngine {
   readonly scene=new THREE.Scene()
-  readonly camera=new THREE.PerspectiveCamera(42,1,.2,1400)
+  readonly camera=new THREE.PerspectiveCamera(42,1,.3,6000)
   readonly renderer:THREE.WebGLRenderer
   readonly controls:OrbitControls
   readonly cardboard:Cardboard
   private cleanupLighting:()=>void
   private root?:THREE.Group
   private mixer?:THREE.AnimationMixer
+  private ground?:Heightfield
+  // VR gaze locomotion: look at the ground for GAZE_MS and the viewer glides there.
+  private gazePoint=new THREE.Vector3(1e9,0,0);private gazeDwell=0;private gazeShown=0
+  private walk?:{start:number;from:THREE.Vector3;to:THREE.Vector3}
   private observer:ResizeObserver
   private dead=false
   private width=1;private height=1
@@ -44,7 +52,7 @@ export class SceneEngine {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));host.appendChild(this.renderer.domElement)
     this.renderer.domElement.tabIndex=0
     this.controls=new OrbitControls(this.camera,this.renderer.domElement)
-    this.controls.enableDamping=true;this.controls.dampingFactor=.07;this.controls.minDistance=6;this.controls.maxDistance=340;this.controls.maxPolarAngle=Math.PI*.48
+    this.controls.enableDamping=true;this.controls.dampingFactor=.07;this.controls.minDistance=4;this.controls.maxDistance=1100;this.controls.maxPolarAngle=Math.PI*.48
     this.controls.addEventListener('start',this.cancelTransition)
     this.camera.position.copy(POSES.reset.position);this.controls.target.copy(POSES.reset.target)
     this.controls.update()
@@ -64,7 +72,10 @@ export class SceneEngine {
     try{
       const {root,mixer}=await loadLandscape(this.cb.progress)
       if(this.dead){disposeScene(root);return}
-      this.root=root;this.mixer=mixer;this.scene.add(root);root.updateMatrixWorld(true)
+      this.root=root;this.mixer=mixer;
+      const terrain=root.getObjectByName('Terrain');const terrainMesh=terrain instanceof THREE.Mesh?terrain:terrain?.children.find(c=>c instanceof THREE.Mesh) as THREE.Mesh|undefined
+      if(terrainMesh)this.ground=new Heightfield(terrainMesh)
+      this.scene.add(root);root.updateMatrixWorld(true)
       for(const p of places){
         const node=root.getObjectByName(p.node)??root.getObjectByName(p.node.replaceAll('_',' '))
         if(!node)throw new Error('Missing authored POI node: '+p.node)
@@ -99,9 +110,9 @@ export class SceneEngine {
     const aspect=this.width/this.height
     if(aspect<1&&name!=='shore'){
       const halfH=Math.tan(THREE.MathUtils.degToRad(this.camera.fov/2))*aspect
-      const distance=THREE.MathUtils.clamp(62/halfH,120,340)
+      const distance=THREE.MathUtils.clamp(115/halfH,300,660)
       const direction=name==='aerial'?new THREE.Vector3(0,1,.08):new THREE.Vector3(.06,.72,.69)
-      target.set(8,0,-8) // aim at the lake itself; the wide-screen pose looks past it to the mountain
+      target.set(0,0,-30) // aim at the lake itself; the wide-screen pose looks past it to the mountain
       position.copy(target).addScaledVector(direction.normalize(),distance)
     }
     this.move(target,position);this.ring.visible=false
@@ -111,14 +122,14 @@ export class SceneEngine {
     const rect=this.host.getBoundingClientRect()
     this.raycaster.setFromCamera(new THREE.Vector2((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1),this.camera)
     const hit=this.raycaster.intersectObject(this.root,true)[0]
-    if(hit)this.move(hit.point,hit.point.clone().add(this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(40)))
+    if(hit)this.move(hit.point,hit.point.clone().add(this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(60)))
   }
   private key=(e:KeyboardEvent)=>{
     if(this.cardboard.active)return
     if(e.key==='Home'){e.preventDefault();this.preset('reset');return}
     const offset=this.camera.position.clone().sub(this.controls.target),sphere=new THREE.Spherical().setFromVector3(offset)
     if(e.key==='ArrowLeft')sphere.theta-=.12;else if(e.key==='ArrowRight')sphere.theta+=.12;else if(e.key==='ArrowUp')sphere.phi-=.1;else if(e.key==='ArrowDown')sphere.phi+=.1;else if(e.key==='+'||e.key==='=')sphere.radius*=.85;else if(e.key==='-')sphere.radius*=1.15;else return
-    e.preventDefault();sphere.phi=THREE.MathUtils.clamp(sphere.phi,.05,Math.PI*.48);sphere.radius=THREE.MathUtils.clamp(sphere.radius,6,340);this.move(this.controls.target.clone(),new THREE.Vector3().setFromSpherical(sphere).add(this.controls.target))
+    e.preventDefault();sphere.phi=THREE.MathUtils.clamp(sphere.phi,.05,Math.PI*.48);sphere.radius=THREE.MathUtils.clamp(sphere.radius,4,1100);this.move(this.controls.target.clone(),new THREE.Vector3().setFromSpherical(sphere).add(this.controls.target))
   }
   setLanguage(language:Language){
     this.language=language
@@ -127,13 +138,13 @@ export class SceneEngine {
       const canvas=document.createElement('canvas');canvas.width=512;canvas.height=96
       const ctx=canvas.getContext('2d')!;ctx.fillStyle='#163d32';ctx.fillRect(0,0,512,96);ctx.fillStyle='#fff9e8';ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText(p.number+'  '+p.title[language],256,59)
       const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace
-      const label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));label.position.copy(position).add(new THREE.Vector3(0,4,0));label.scale.set(16,3,1);label.visible=false;this.scene.add(label);this.labels.set(p.id,label)
+      const label=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));label.position.copy(position).add(new THREE.Vector3(0,5,0));label.scale.set(24,4.5,1);label.visible=false;this.scene.add(label);this.labels.set(p.id,label)
     }
     this.renderer.domElement.setAttribute('aria-label',language==='kk'?'Имантау интерактивті 3D көрінісі':'Интерактивная 3D-сцена Имантау')
   }
   setAnnotations(value:boolean){this.annotations=value}
   async startVR(){this.transition=undefined;const ok=await this.cardboard.start();this.controls.enabled=!ok;if(ok){this.camera.clearViewOffset();this.resize()}return ok}
-  stopVR(){this.cardboard.stop();this.controls.enabled=true;this.resize()}
+  stopVR(){this.walk=undefined;this.gazeDwell=0;this.setGaze(0);this.cardboard.stop();this.controls.enabled=true;this.resize()}
   private animate=()=>{
     if(this.dead)return
     this.frame=requestAnimationFrame(this.animate)
@@ -145,13 +156,31 @@ export class SceneEngine {
     this.labels.forEach(label=>label.visible=this.cardboard.active&&this.annotations)
     if(this.cardboard.active){
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
-      else this.cardboard.render(this.renderer,this.scene,this.width,this.height)
+      else{this.updateGaze(delta,time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
       this.controls.update();this.renderer.setScissorTest(false);this.renderer.setViewport(0,0,this.width,this.height);this.renderer.render(this.scene,this.camera)
       if(import.meta.env.DEV&&time-this.statsTime>1000){this.statsTime=time;this.renderer.domElement.dataset.diagnostics=JSON.stringify({...this.stats,fps:Math.round(1000/(this.samples.reduce((a,b)=>a+b,0)/this.samples.length))})}
       if(time-this.lastMarker>50){this.lastMarker=time;this.cb.markers(places.map(p=>{const target=this.targets.get(p.id);if(!target)return{id:p.id,x:0,y:0,visible:false};this.projection.copy(target).project(this.camera);return{id:p.id,x:(this.projection.x*.5+.5)*this.width,y:(-.5*this.projection.y+.5)*this.height,visible:this.annotations&&this.projection.z>-1&&this.projection.z<1&&Math.abs(this.projection.x)<.94&&Math.abs(this.projection.y)<.9}}))}
     }
   }
-  get stats(){return{...this.renderer.info.memory,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,poiCount:this.targets.size}}
+  private setGaze(p:number){if(Math.abs(p-this.gazeShown)>.04||(p===0&&this.gazeShown!==0)){this.gazeShown=p;this.cb.gaze?.(p)}}
+  private updateGaze(delta:number,time:number){
+    const GAZE_MS=1600,EYE=2.4
+    if(this.walk){
+      const t=Math.min((time-this.walk.start)/1400,1),e=t*t*(3-2*t)
+      this.camera.position.lerpVectors(this.walk.from,this.walk.to,e)
+      if(t===1)this.walk=undefined
+      return
+    }
+    if(!this.ground)return
+    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion)
+    // Only a downward look at dry land (above the lake surface) counts as "go there".
+    const hit=dir.y<-.1?this.ground.raycast(this.camera.position,dir):null
+    if(!hit||hit.y<.15||hit.distanceTo(this.camera.position)<3){this.gazeDwell=0;this.gazePoint.set(1e9,0,0);this.setGaze(0);return}
+    if(hit.distanceTo(this.gazePoint)>4){this.gazePoint.copy(hit);this.gazeDwell=0}else this.gazeDwell+=Math.min(delta,100)
+    const p=Math.min(this.gazeDwell/GAZE_MS,1);this.setGaze(p)
+    if(p>=1){this.walk={start:time,from:this.camera.position.clone(),to:hit.clone().add(new THREE.Vector3(0,EYE,0))};this.gazeDwell=0;this.gazePoint.set(1e9,0,0);this.setGaze(0)}
+  }
+  get stats(){return{...this.renderer.info.memory,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,poiCount:this.targets.size,groundReady:!!this.ground,groundAtLake:this.ground?.at(-12.6,-66)??null}}
   dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
 }

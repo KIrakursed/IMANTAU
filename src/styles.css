@@ -12,3 +12,20 @@
 .marker-note{display:none;position:absolute;left:41px;top:38px;width:220px;white-space:normal;background:#fcfbf1;color:#40564b;padding:9px 11px;border-radius:4px;font-size:10px;line-height:1.6;box-shadow:0 8px 26px #142f3622;text-align:left}.marker:hover .marker-note,.marker:focus-visible .marker-note{display:block}.marker.selected .marker-note{display:none}.marker:hover{z-index:5}.pin{transition:transform .2s}.marker:hover .pin{transform:scale(1.08)}.marker.selected .pin:before{content:'';position:absolute;inset:-7px;border-radius:50%;border:1px solid #224a37;opacity:.5;animation:pulse 2.2s ease-out infinite}@keyframes pulse{from{transform:scale(.8);opacity:.7}to{transform:scale(1.5);opacity:0}}
 @media(hover:none),(max-width:900px){.marker-note{display:none!important}}
 .scene-heading h1,.scene-heading p,.scene-heading .eyebrow{text-shadow:0 0 18px #f6f5edd9,0 0 4px #f6f5ed}
+/* Real photos, facts, lightbox */
+.hero-photo{margin:4px 0 6px}.hero-photo button{display:block;padding:0;width:100%}.hero-photo img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;display:block}.hero-photo figcaption{font-size:9px;color:#6f786b;margin-top:6px;line-height:1.6}.hero-photo a,.lightbox a{color:inherit}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#203c3118;border:1px solid #203c3118;border-radius:6px;overflow:hidden;margin:0}.facts div{background:#fbfaf2;padding:9px 11px}.facts dt{font-size:9px;color:#6e796e;letter-spacing:.3px}.facts dd{margin:3px 0 0;font-size:13px;font-weight:700;color:#203c31}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.photo-grid button{padding:0;display:block}.photo-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:4px;display:block}
+.lightbox{position:fixed;inset:0;z-index:20;background:#0d1a15ee;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;cursor:zoom-out}.lightbox img{max-width:min(1100px,100%);max-height:78dvh;object-fit:contain;border-radius:6px}.lightbox p{color:#e9eee6;font-size:12px;margin-top:12px;text-align:center}.lightbox .icon{position:absolute;top:16px;right:16px;color:#fff;background:#ffffff1f}
+/* Homepage legibility over the 3D scene */
+.scene-heading{padding:14px 18px 12px;margin:-14px 0 0 -18px;background:#f6f5edd9;border-radius:10px;box-shadow:0 10px 40px #142f3614;backdrop-filter:blur(6px)}.scene-heading h1,.scene-heading p,.scene-heading .eyebrow{text-shadow:none}.scene-heading p{color:#4f5d52;margin-bottom:0}
+.explorer{background:#f6f5edeb;padding:14px 16px;border-radius:10px;box-shadow:0 10px 40px #142f3614;backdrop-filter:blur(6px)}.explorer-note{color:#55625a}
+.has-panel .scene-heading h1{background:transparent;padding:0;margin-left:0}.has-panel .scene-heading p{visibility:visible}
+.view-label,.interaction-hint{background:#f6f5edd9;padding:6px 10px;border-radius:6px}.interaction-hint{color:#4f5d52}
+@media(max-width:900px){.scene-heading{margin:0;padding:10px 14px;max-width:calc(100vw - 90px)}.explorer{padding:18px 22px}}
+/* Never let focus scroll the full-screen stage (it hid the top bar). */
+html,body{overflow:hidden;height:100%}.museum{overflow:clip}
+@media(max-height:760px) and (min-width:901px){.explorer-note{display:none}.explorer{max-height:calc(100dvh - 330px);overflow:auto}}
+/* VR gaze reticle: fills while looking at the ground */
+.vr-reticle{width:22px;height:22px;margin:-11px 0 0 -11px;border:2px solid #ffffffcc;border-radius:50%;background:conic-gradient(#ffffffd9 calc(var(--gaze,0)*360deg),transparent 0);box-shadow:0 0 0 1px #0006;transform:scale(calc(.55 + var(--gaze,0)*.45))}
+.vr-gaze-hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#fff;background:#0008;padding:6px 10px;border-radius:4px;font-size:11px;pointer-events:none}

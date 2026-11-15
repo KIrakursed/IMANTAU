@@ -23,7 +23,9 @@ function paintSky(){
       const r=(22+rnd()*46)*scale*flat,x=cx+(rnd()-.5)*190*scale,y=cy+(rnd()-.6)*34*scale*flat
       const puff=ctx.createRadialGradient(x,y-r*.25,0,x,y,r)
       puff.addColorStop(0,'rgba(255,255,255,.95)');puff.addColorStop(.55,'rgba(246,248,252,.7)');puff.addColorStop(1,'rgba(225,233,244,0)')
-      ctx.fillStyle=puff;ctx.beginPath();ctx.ellipse(x,y,r*1.5,r,0,0,Math.PI*2);ctx.fill()
+      ctx.fillStyle=puff
+      // draw wrapped copies so the equirect seam (and its reflection in the lake) stays invisible
+      for(const ox of [-w,0,w]){ctx.save();ctx.translate(ox,0);ctx.beginPath();ctx.ellipse(x,y,r*1.5,r,0,0,Math.PI*2);ctx.fill();ctx.restore()}
     }
   }
   ctx.filter='none'
@@ -40,7 +42,11 @@ export function lighting(scene:THREE.Scene, renderer:THREE.WebGLRenderer) {
   renderer.shadowMap.type=THREE.PCFSoftShadowMap
   const sky=paintSky()
   // Aerial perspective: distant terrain edges dissolve into the horizon haze, as in the photo.
-  scene.fog=new THREE.Fog('#c6dbef',420,1100)
+  scene.fog=new THREE.Fog('#c6dbef',560,1500)
+  // The surveyed area is ~22 x 23 km; beyond it a plain in the region's average colour runs into
+  // the haze so the model's edge is not seen as a cliff against the sky.
+  const plain=new THREE.Mesh(new THREE.CircleGeometry(4000,64),new THREE.MeshLambertMaterial({color:'#7d9474'}))
+  plain.rotation.x=-Math.PI/2;plain.position.y=-.6;plain.name='Regional_plain';scene.add(plain)
   scene.background=sky;scene.backgroundIntensity=1.0;scene.backgroundBlurriness=.04
   const pmrem=new THREE.PMREMGenerator(renderer)
   const environment=pmrem.fromEquirectangular(sky)
@@ -48,9 +54,9 @@ export function lighting(scene:THREE.Scene, renderer:THREE.WebGLRenderer) {
   pmrem.dispose()
   scene.add(new THREE.HemisphereLight('#cfe1f5','#4d5c3e',0.5))
   const sun=new THREE.DirectionalLight('#fff1d6',2.4)
-  sun.position.set(-90,140,60);sun.target.position.set(0,0,-20);scene.add(sun.target);sun.castShadow=true
+  sun.position.set(-320,480,220);sun.target.position.set(0,0,-20);scene.add(sun.target);sun.castShadow=true
   sun.shadow.mapSize.set(4096,4096)
-  Object.assign(sun.shadow.camera,{left:-175,right:175,top:185,bottom:-185,near:10,far:480})
+  Object.assign(sun.shadow.camera,{left:-300,right:300,top:320,bottom:-320,near:20,far:1600})
   sun.shadow.normalBias=0.6;sun.shadow.bias=-0.0004;sun.shadow.radius=2;sun.shadow.intensity=0.72
   scene.add(sun)
   return ()=>{environment.dispose();sky.dispose();sun.shadow.dispose()}

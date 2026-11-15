@@ -35,13 +35,13 @@ export class Cardboard {
       })
       if(!sampled){this.stop();return false}
       this.savedPosition.copy(this.camera.position);this.savedQuaternion.copy(this.camera.quaternion);this.savedFov=this.camera.fov
-      this.camera.position.set(29,2.6,20);this.camera.lookAt(-14,3,-10);this.camera.fov=80
+      this.camera.position.set(132,3.2,22);this.camera.lookAt(42,2,-3);this.camera.fov=80
       this.recenter();this.active=true;return true
     }catch{this.stop();return false}
   }
   recenter(){
     // Preserve a level forward heading; cancel the current sensor quaternion once.
-    const direction=new THREE.Vector3(-14,3,-10).sub(this.camera.position);direction.y=0
+    const direction=new THREE.Vector3(42,2,-3).sub(this.camera.position);direction.y=0
     const level=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(),direction,new THREE.Vector3(0,1,0)))
     this.correction.copy(level).multiply(this.raw.clone().invert())
   }

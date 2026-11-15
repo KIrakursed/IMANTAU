@@ -1,11 +1,12 @@
 ﻿import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
+const lowPower=()=>matchMedia('(pointer:coarse)').matches||innerWidth<900
 export interface Landscape { root:THREE.Group; mixer:THREE.AnimationMixer }
 
 /** Loads the Blender-built scene (tools/blender_build_scene.py). */
 export async function loadLandscape(progress:(n:number)=>void):Promise<Landscape> {
-  const gltf=await new GLTFLoader().loadAsync(import.meta.env.BASE_URL+'scenes/IMANTAU-scene.glb',e=>progress(e.total?e.loaded/e.total:0))
+  const gltf=await new GLTFLoader().loadAsync(import.meta.env.BASE_URL+'scenes/IMANTAU-real.glb',e=>progress(e.total?e.loaded/e.total:0))
   const root=gltf.scene
   root.updateMatrixWorld(true)
   const uses=new Map<string,THREE.Mesh[]>()
@@ -32,6 +33,8 @@ export async function loadLandscape(progress:(n:number)=>void):Promise<Landscape
     const instance=new THREE.InstancedMesh(geometry,material,meshes.length)
     instance.name=meshes[0].name.replace(/_\d+$/,'')+'_instances';instance.castShadow=true;instance.receiveShadow=true
     meshes.forEach((mesh,i)=>{instance.setMatrixAt(i,mesh.matrixWorld);mesh.removeFromParent()})
+    // Phones draw a random half of the forest (instances are stored in random order).
+    if(lowPower())instance.count=Math.ceil(meshes.length*.5)
     instance.instanceMatrix.needsUpdate=true;instance.computeBoundingSphere();root.add(instance)
   }
   // Water waves: only the shape-key (morph weight) clip from the provided water asset.

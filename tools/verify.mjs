@@ -33,4 +33,12 @@ globalThis.DeviceOrientationEvent.requestPermission=async()=> 'denied';assert.eq
 globalThis.window.isSecureContext=false;assert.equal(await board.start(),false)
 delete globalThis.DeviceOrientationEvent;globalThis.window.isSecureContext=true;assert.equal(await board.start(),false)
 sample=false
-console.log('PASS: URL rules, KK/RU key parity, linked POIs, synthetic sensor permission branches, stereo projection/viewport/eye separation, recenter and camera cleanup.')
+const {Heightfield}=await load('src/viewer/heightfield.ts')
+const plane=new THREE.PlaneGeometry(100,100,50,50);plane.rotateX(-Math.PI/2)
+const pp=plane.getAttribute('position');for(let i=0;i<pp.count;i++)pp.setY(i,pp.getX(i)*.1)
+const field=new Heightfield(new THREE.Mesh(plane))
+assert.ok(Math.abs(field.at(10,3)-1)<1e-4,'bilinear height');assert.equal(field.at(80,0),null,'outside')
+const gazeHit=field.raycast(new THREE.Vector3(0,20,0),new THREE.Vector3(1,-1,0).normalize(),200)
+assert.ok(gazeHit&&Math.abs(gazeHit.x-20/1.1)<.05&&Math.abs(gazeHit.y-gazeHit.x*.1)<.01,'gaze ray hits the ground: '+JSON.stringify(gazeHit))
+assert.equal(field.raycast(new THREE.Vector3(0,20,0),new THREE.Vector3(1,.2,0).normalize(),200),null,'looking up never hits')
+console.log('PASS: URL rules, KK/RU key parity, linked POIs, synthetic sensor permission branches, stereo projection/viewport/eye separation, recenter and camera cleanup, VR gaze heightfield ray.')
