@@ -20,6 +20,7 @@ export class Cardboard {
   private readonly base = new THREE.Quaternion(-Math.SQRT1_2, 0, 0, Math.SQRT1_2)
   private readonly axis = new THREE.Vector3(0, 0, 1)
   private latest = 0
+  private forwardTarget = new THREE.Vector3(30, 6, 52)
   private sessionId = 0
   private listening = false
 
@@ -59,7 +60,7 @@ export class Cardboard {
    * Must be called directly from a user gesture so iOS can show its
    * DeviceOrientation permission prompt.
    */
-  async start(): Promise<boolean> {
+  async start(spawnPosition: THREE.Vector3, lookTarget: THREE.Vector3): Promise<boolean> {
     this.stop()
     const session = ++this.sessionId
 
@@ -105,8 +106,9 @@ export class Cardboard {
       this.savedQuaternion.copy(this.camera.quaternion)
       this.savedFov = this.camera.fov
 
-      this.camera.position.set(132, 3.2, 22)
-      this.camera.lookAt(42, 2, -3)
+      this.camera.position.copy(spawnPosition)
+      this.forwardTarget.copy(lookTarget)
+      this.camera.lookAt(this.forwardTarget)
       this.camera.fov = 80
       this.camera.updateProjectionMatrix()
 
@@ -124,7 +126,7 @@ export class Cardboard {
   recenter() {
     if (!this.listening || this.latest === 0) return
 
-    const direction = new THREE.Vector3(42, 2, -3).sub(this.camera.position)
+    const direction = this.forwardTarget.clone().sub(this.camera.position)
     direction.y = 0
 
     if (direction.lengthSq() < 1e-8) return
