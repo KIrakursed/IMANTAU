@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 const lowPower=()=>matchMedia('(pointer:coarse)').matches||innerWidth<900
 export interface Landscape { root:THREE.Group; mixer:THREE.AnimationMixer }
 
-/** Deterministic multi-channel procedural detail texture (grass grain / rock structure / micro-shade). */
+/** 512px seamless procedural grass/stone albedo. Repeated 180x for close-range sharpness. */
 function createCrispDetailTexture(renderer:THREE.WebGLRenderer){
   const size=512,canvas=document.createElement('canvas')
   canvas.width=size;canvas.height=size
@@ -17,40 +17,54 @@ function createCrispDetailTexture(renderer:THREE.WebGLRenderer){
   }
   for(let y=0;y<size;y++)for(let x=0;x<size;x++){
     const i=(y*size+x)*4
-    const fine=105+hash(x,y,1)*50
-    const rock=95+(Math.sin((x+y*size)*.015)*25)+hash(x,y,2)*40
-    data[i]=fine
-    data[i+1]=rock
-    data[i+2]=(fine+rock)*.5
+    const n=hash(x,y,1),coarse=hash(x>>2,y>>2,2),grain=hash(x*3,y*5,3)
+    const blade=Math.max(0,Math.sin((x*0.71+y*0.19)+coarse*5))*0.16
+    const stone=Math.max(0,Math.sin((x*0.13-y*0.31)+n*8))*0.12
+    const value=0.72+n*0.18+coarse*0.07+grain*0.06
+    data[i]=Math.min(255,Math.round(112+value*52+blade*35))
+    data[i+1]=Math.min(255,Math.round(118+value*48+stone*24))
+    data[i+2]=Math.min(255,Math.round(103+value*42+grain*16))
     data[i+3]=255
   }
   ctx.putImageData(image,0,0)
+  // Add sparse fine grass/rock strokes; opposite edges remain seamless via wrapped shader sampling.
+  ctx.globalAlpha=.16
+  for(let i=0;i<1800;i++){
+    const x=hash(i,3,7)*size,y=hash(i,9,8)*size
+    ctx.strokeStyle=i%3?'#d4d0a5':'#343c2d'
+    ctx.lineWidth=.5+hash(i,5,9)*1.2
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+1.5+hash(i,8,10)*3,y-2+hash(i,4,11)*4);ctx.stroke()
+  }
   const texture=new THREE.CanvasTexture(canvas)
   texture.wrapS=texture.wrapT=THREE.RepeatWrapping
-  texture.colorSpace=THREE.NoColorSpace
-  texture.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower()?4:12)
+  texture.repeat.set(180,180)
+  texture.colorSpace=THREE.SRGBColorSpace
+  texture.anisotropy=renderer.capabilities.getMaxAnisotropy()
   texture.generateMipmaps=true
   texture.minFilter=THREE.LinearMipmapLinearFilter
   texture.magFilter=THREE.LinearFilter
+  texture.needsUpdate=true
   return texture
 }
 
-/** Add world-space grass/rock detail to the existing satellite albedo without replacing it. */
+/** Blend crisp triplanar detail into the satellite albedo; steep slopes expose stone detail. */
 function improveTerrainMaterial(mesh:THREE.Mesh,renderer:THREE.WebGLRenderer,detail:THREE.Texture){
   const materials=Array.isArray(mesh.material)?mesh.material:[mesh.material]
   for(const material of materials){
     if(!(material instanceof THREE.MeshStandardMaterial))continue
-    const maxAnisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower()?4:12)
+    const maxAnisotropy=renderer.capabilities.getMaxAnisotropy()
+    const textureSlots=['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap','bumpMap','alphaMap','displacementMap'] as const
+    for(const slot of textureSlots){
+      const texture=material[slot]
+      if(texture){texture.anisotropy=maxAnisotropy;texture.needsUpdate=true}
+    }
     if(material.map){
-      material.map.anisotropy=maxAnisotropy
       material.map.minFilter=THREE.LinearMipmapLinearFilter
       material.map.magFilter=THREE.LinearFilter
-      material.map.needsUpdate=true
     }
-    material.bumpMap=detail
-    material.bumpScale=lowPower()?.018:.028
+    material.bumpMap=null
     material.roughness=Math.max(material.roughness,.82)
-    material.metalness=Math.min(material.metalness,.06)
+    material.metalness=Math.min(material.metalness,.04)
     material.onBeforeCompile=(shader)=>{
       shader.uniforms.uTerrainDetail={value:detail}
       shader.vertexShader=shader.vertexShader
@@ -59,28 +73,32 @@ function improveTerrainMaterial(mesh:THREE.Mesh,renderer:THREE.WebGLRenderer,det
           varying vec3 vTerrainWorldNormal;`)
         .replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
           vTerrainWorldPos=(modelMatrix*vec4(transformed,1.0)).xyz;
-          vTerrainWorldNormal=normalize(mat3(transpose(inverse(modelMatrix)))*objectNormal);`)
+          vTerrainWorldNormal=normalize(mat3(modelMatrix)*objectNormal);`)
       shader.fragmentShader=shader.fragmentShader
         .replace('#include <common>',`#include <common>
           uniform sampler2D uTerrainDetail;
           varying vec3 vTerrainWorldPos;
-          varying vec3 vTerrainWorldNormal;`)
+          varying vec3 vTerrainWorldNormal;
+          vec3 imantauTriplanar(sampler2D tex,vec3 p,vec3 n){
+            vec3 w=pow(abs(normalize(n)),vec3(4.0));
+            w/=max(w.x+w.y+w.z,0.0001);
+            vec3 x=texture2D(tex,p.zy).rgb;
+            vec3 y=texture2D(tex,p.xz).rgb;
+            vec3 z=texture2D(tex,p.xy).rgb;
+            return x*w.x+y*w.y+z*w.z;
+          }`)
         .replace('#include <map_fragment>',`#include <map_fragment>
-          vec2 terrainUvA=vTerrainWorldPos.xz*0.08;
-          vec2 terrainUvB=vTerrainWorldPos.xz*0.35;
-          vec3 terrainDetailA=texture2D(uTerrainDetail,terrainUvA).rgb;
-          vec3 terrainDetailB=texture2D(uTerrainDetail,terrainUvB).rgb;
-          float terrainNoise=mix(terrainDetailA.r,terrainDetailB.g,0.5);
-          float terrainSlope=1.0-clamp(normalize(vTerrainWorldNormal).y,0.0,1.0);
-          float terrainRock=smoothstep(0.25,0.55,terrainSlope);
-          vec3 rockTint=vec3(0.36,0.38,0.35)*(0.75+terrainNoise*0.5);
-          diffuseColor.rgb=mix(
-            diffuseColor.rgb*(0.82+terrainNoise*0.36),
-            rockTint,
-            terrainRock*0.42
-          );`)
+          vec3 terrainN=normalize(vTerrainWorldNormal);
+          // 180 repeats over the authored 380x440m terrain footprint.
+          vec3 terrainP=vTerrainWorldPos*0.40909;
+          vec3 detailAlbedo=imantauTriplanar(uTerrainDetail,terrainP,terrainN);
+          float slopeRock=1.0-smoothstep(0.58,0.78,terrainN.y);
+          vec3 grassDetail=diffuseColor.rgb*(0.82+detailAlbedo*0.34);
+          vec3 stoneBase=vec3(0.43,0.43,0.39);
+          vec3 stoneDetail=stoneBase*(0.72+detailAlbedo*0.58);
+          diffuseColor.rgb=mix(grassDetail,stoneDetail,slopeRock);`)
     }
-    material.customProgramCacheKey=()=> 'imantau-terrain-detail-v2'
+    material.customProgramCacheKey=()=> 'imantau-terrain-triplanar-detail-v3'
     material.needsUpdate=true
   }
 }
@@ -88,7 +106,7 @@ function improveTerrainMaterial(mesh:THREE.Mesh,renderer:THREE.WebGLRenderer,det
 /** Conservative camera clearance over a narrow ridge; ignores out-of-bounds samples. */
 export function getSafeRidgeCameraY(
   getHeightAtXZ:(x:number,z:number)=>number|null,
-  x:number,z:number,eyeHeight=2.5,radius=1.4,
+  x:number,z:number,eyeHeight=2.5,radius=1.5,
 ){
   const samples=[
     getHeightAtXZ(x,z),getHeightAtXZ(x,z-radius),getHeightAtXZ(x,z+radius),
@@ -162,7 +180,7 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
         object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
         material.envMapIntensity=1.35
         material.metalness=.12;material.roughness=.12
-        material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
+        material.polygonOffset=true;material.polygonOffsetFactor=-1;material.polygonOffsetUnits=-1
         applyLakeShorelineMask(material)
       }
       if(material.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial){
