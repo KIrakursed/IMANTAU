@@ -32,7 +32,7 @@ export class SceneEngine {
   private gazeStarted=0
   private readonly gazeDuration=1750
   private readonly maxStepDistance=25
-  private readonly eyeHeight=2.4
+  private readonly eyeHeight=2.5
   private vrMove?:{start:number;duration:number;from:THREE.Vector3;to:THREE.Vector3}
   private observer:ResizeObserver
   private dead=false
@@ -52,12 +52,13 @@ export class SceneEngine {
   private previousFrame=performance.now()
   private statsTime=0
   constructor(private host:HTMLElement,private cb:ViewerCallbacks){
-    this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'})
+    this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance',logarithmicDepthBuffer:true})
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,2));host.appendChild(this.renderer.domElement)
     this.renderer.domElement.tabIndex=0
     this.controls=new OrbitControls(this.camera,this.renderer.domElement)
     this.controls.enableDamping=true;this.controls.dampingFactor=.07;this.controls.minDistance=4;this.controls.maxDistance=1100;this.controls.maxPolarAngle=Math.PI*.48
     this.controls.addEventListener('start',this.cancelTransition)
+    this.camera.near=.05;this.camera.updateProjectionMatrix()
     this.camera.position.copy(POSES.reset.position);this.controls.target.copy(POSES.reset.target)
     this.controls.update()
     this.cardboard=new Cardboard(this.camera)
@@ -255,7 +256,7 @@ export class SceneEngine {
     const x=origin.x+offset.x,z=origin.z+offset.z
     const terrainHeight=this.ground.at(x,z)
     if(terrainHeight===null)return null
-    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.5)
     return new THREE.Vector3(x,safeY??terrainHeight+this.eyeHeight,z)
   }
 
@@ -283,7 +284,8 @@ export class SceneEngine {
     this.camera.position.set(x,safeY??terrain+this.eyeHeight,z)
     this.camera.updateMatrixWorld(true)
     if(t>=1){
-      this.camera.position.copy(move.to)
+      const finalY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,move.to.x,move.to.z,this.eyeHeight,1.5)
+      this.camera.position.set(move.to.x,finalY??move.to.y,move.to.z)
       this.vrMove=undefined
       this.resetGaze()
     }
