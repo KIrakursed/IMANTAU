@@ -213,8 +213,11 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
     object.castShadow=true;object.receiveShadow=true
     const materials=Array.isArray(object.material)?object.material:[object.material]
     for(const material of materials){
-      if(material instanceof THREE.MeshStandardMaterial&&material.map){
-        material.map.anisotropy=renderer.capabilities.getMaxAnisotropy()
+      if(material instanceof THREE.Material){
+        const maxAnisotropy=renderer.capabilities.getMaxAnisotropy()
+        for(const value of Object.values(material)){
+          if(value instanceof THREE.Texture)value.anisotropy=maxAnisotropy
+        }
       }
       if(material.name==='Lake_Water'&&material instanceof THREE.MeshStandardMaterial){
         object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
