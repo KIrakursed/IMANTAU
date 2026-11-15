@@ -105,6 +105,44 @@ export function getSafeTeleportPosition(hitPoint:THREE.Vector3,hitNormal?:THREE.
   return safe
 }
 
+
+/** Clip the imported rectangular water card to the lake shoreline authored in Blender. */
+function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
+  material.transparent=true
+  material.opacity=.84
+  material.depthWrite=false
+  material.side=THREE.DoubleSide
+  material.onBeforeCompile=(shader)=>{
+    shader.vertexShader=shader.vertexShader
+      .replace('#include <common>',`#include <common>
+        varying vec3 vImantauWaterWorld;`)
+      .replace('#include <worldpos_vertex>',`#include <worldpos_vertex>
+        vImantauWaterWorld=(modelMatrix*vec4(transformed,1.0)).xyz;`)
+    shader.fragmentShader=shader.fragmentShader
+      .replace('#include <common>',`#include <common>
+        varying vec3 vImantauWaterWorld;
+        float imantauEllipse(vec2 p,vec2 center,vec2 radii,float angle){
+          float c=cos(angle),s=sin(angle);
+          vec2 q=p-center;
+          q=vec2(c*q.x+s*q.y,-s*q.x+c*q.y);
+          return length(q/radii)-1.0;
+        }`)
+      .replace('#include <clipping_planes_fragment>',`#include <clipping_planes_fragment>
+        vec2 lakeP=vec2(vImantauWaterWorld.x,vImantauWaterWorld.z);
+        float lakeD=min(
+          min(imantauEllipse(lakeP,vec2(0.0,-5.0),vec2(48.0,26.0),0.0),
+              imantauEllipse(lakeP,vec2(52.0,-38.0),vec2(40.0,12.0),0.4887)),
+          min(imantauEllipse(lakeP,vec2(30.0,14.0),vec2(20.0,13.0),0.0),
+              imantauEllipse(lakeP,vec2(-62.0,-50.0),vec2(20.0,5.0),0.1745))
+        );
+        if(lakeD>0.0) discard;`)
+      .replace('#include <color_fragment>',`#include <color_fragment>
+        diffuseColor.rgb*=vec3(0.82,0.94,0.96);`)
+  }
+  material.customProgramCacheKey=()=> 'imantau-lake-shoreline-mask-v1'
+  material.needsUpdate=true
+}
+
 /** Loads the Blender-built scene (tools/blender_build_scene.py). */
 export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.WebGLRenderer):Promise<Landscape> {
   const gltf=await new GLTFLoader().loadAsync(import.meta.env.BASE_URL+'scenes/IMANTAU-real.glb',e=>progress(e.total?e.loaded/e.total:0))
@@ -114,21 +152,26 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
   const uses=new Map<string,THREE.Mesh[]>()
   root.traverse(object=>{
     if(!(object instanceof THREE.Mesh))return
-    const material=object.material as THREE.MeshStandardMaterial
     object.castShadow=true;object.receiveShadow=true
-    if(material.map)material.map.anisotropy=12
-    if(material.name==='Lake_Water'){
-      // Semi-transparent so the sandy shallows read turquoise, like the reference beach cove.
-      object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
-      material.depthWrite=false;material.envMapIntensity=1.8
-      // A touch of metalness strengthens the sky/cloud reflection the reference lake shows at oblique angles.
-      material.metalness=.32;material.roughness=.035;material.opacity=.9
+    const materials=Array.isArray(object.material)?object.material:[object.material]
+    for(const material of materials){
+      if(material instanceof THREE.MeshStandardMaterial&&material.map){
+        material.map.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),lowPower()?4:12)
+      }
+      if(material.name==='Lake_Water'&&material instanceof THREE.MeshStandardMaterial){
+        object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
+        material.envMapIntensity=1.35
+        material.metalness=.12;material.roughness=.12
+        material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
+        applyLakeShorelineMask(material)
+      }
+      if(material.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial){
+        object.castShadow=false
+        if(detailTexture)improveTerrainMaterial(object,renderer,detailTexture)
+      }
     }
-    if(material.name==='Terrain'){object.castShadow=false;if(detailTexture)improveTerrainMaterial(object,renderer,detailTexture)}
-    if(material.name==='Lake_Water'){
-      material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
-    }
-    const key=object.geometry.uuid+'|'+material.uuid
+    const materialKey=materials.map(m=>m.uuid).join(',')
+    const key=object.geometry.uuid+'|'+materialKey
     const list=uses.get(key)??[];list.push(object);uses.set(key,list)
   })
   // The thousands of pines (and other repeated meshes) share geometry: draw each once per material.
