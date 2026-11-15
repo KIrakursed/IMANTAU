@@ -30,10 +30,12 @@ export class SceneEngine {
   private focusedId:string|null=null
   private gazeCandidate?:THREE.Vector3
   private gazeStarted=0
-  private readonly gazeDuration=1750
+  private readonly gazeDuration=1600
   private readonly maxStepDistance=25
-  private readonly eyeHeight=2.5
+  private readonly eyeHeight=2.6
   private vrMove?:{start:number;duration:number;from:THREE.Vector3;to:THREE.Vector3}
+  private vrEnteredAt=0
+  private readonly vrHintDuration=3000
   private observer:ResizeObserver
   private dead=false
   private width=1;private height=1
@@ -188,6 +190,7 @@ export class SceneEngine {
     const ok=await this.cardboard.start(spawn,target)
     this.controls.enabled=!ok
     if(ok){
+      this.vrEnteredAt=performance.now()
       this.camera.position.copy(spawn)
       this.camera.clearViewOffset()
       this.resize()
@@ -203,19 +206,22 @@ export class SceneEngine {
     const time=performance.now()
     const delta=time-this.previousFrame;this.previousFrame=time;if(delta<250){this.samples.push(delta);if(this.samples.length>90)this.samples.shift()}
     this.mixer?.update(Math.min(delta,100)/1000)
-    if(this.transition){const t=Math.min((time-this.transition.start)/1100,1),ease=t*t*(3-2*t);this.camera.position.lerpVectors(this.transition.from,this.transition.to,ease);this.controls.target.lerpVectors(this.transition.targetFrom,this.transition.targetTo,ease);if(t===1)this.transition=undefined}
+    if(this.transition){const t=Math.min((time-this.transition.start)/1100,1),ease=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;this.camera.position.lerpVectors(this.transition.from,this.transition.to,ease);this.controls.target.lerpVectors(this.transition.targetFrom,this.transition.targetTo,ease);if(t===1)this.transition=undefined}
     this.labels.forEach((label,id)=>{
       const distance=label.position.distanceTo(this.camera.position)
       // Keep the nearest/selected POI clear; labels fade out before they can fill the headset view.
-      const visible=this.cardboard.active&&this.annotations&&id!==this.focusedId&&distance>58&&distance<900
+      const visible=this.cardboard.active&&this.annotations&&id!==this.focusedId&&distance>=15&&distance<900
       label.visible=visible
       if(visible){
-        const size=THREE.MathUtils.clamp(distance*.035,5.5,15)
+        const size=Math.min(10,THREE.MathUtils.clamp(distance*.022,2.4,10))
         label.scale.set(size,size*.1875,1)
-        ;(label.material as THREE.SpriteMaterial).opacity=THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance,58,150,.34,.62),.34,.62)
+        const nearFade=THREE.MathUtils.smoothstep(distance,15,23)
+        ;(label.material as THREE.SpriteMaterial).opacity=nearFade*THREE.MathUtils.clamp(THREE.MathUtils.mapLinear(distance,23,150,.25,.58),.25,.58)
       }
     })
     if(this.cardboard.active){
+      if(time-this.vrEnteredAt<this.vrHintDuration) this.host.dataset.vrHint='visible'
+      else this.host.dataset.vrHint='hidden'
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
       else{this.updateVRMovement(time);this.enforceVRCameraClearance();if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
@@ -282,7 +288,7 @@ export class SceneEngine {
     const move=this.vrMove
     if(!move||!this.ground)return
     const t=THREE.MathUtils.clamp((time-move.start)/move.duration,0,1)
-    const ease=t*t*(3-2*t)
+    const ease=t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2
     const x=THREE.MathUtils.lerp(move.from.x,move.to.x,ease)
     const z=THREE.MathUtils.lerp(move.from.z,move.to.z,ease)
     const terrain=this.ground.at(x,z)
@@ -322,7 +328,7 @@ export class SceneEngine {
     if(progress>=1){
       const from=this.camera.position.clone()
       const to=this.gazeCandidate.clone()
-      this.vrMove={start:time,duration:2100,from,to}
+      this.vrMove={start:time,duration:2000,from,to}
       this.resetGaze()
     }
   }
