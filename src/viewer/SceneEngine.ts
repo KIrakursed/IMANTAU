@@ -217,7 +217,7 @@ export class SceneEngine {
     })
     if(this.cardboard.active){
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
-      else{this.updateVRMovement(time);if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
+      else{this.updateVRMovement(time);this.enforceVRCameraClearance();if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
       this.controls.update();this.renderer.setScissorTest(false);this.renderer.setViewport(0,0,this.width,this.height);this.renderer.render(this.scene,this.camera)
       if(import.meta.env.DEV&&time-this.statsTime>1000){this.statsTime=time;this.renderer.domElement.dataset.diagnostics=JSON.stringify({...this.stats,fps:Math.round(1000/(this.samples.reduce((a,b)=>a+b,0)/this.samples.length))})}
@@ -266,6 +266,17 @@ export class SceneEngine {
     this.host.style.setProperty('--gaze','0')
   }
 
+  /** Maintain camera clearance at rest as well as while walking on uneven terrain. */
+  private enforceVRCameraClearance(){
+    if(!this.ground||!this.cardboard.active)return
+    const x=this.camera.position.x,z=this.camera.position.z
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.5)
+    if(safeY!==null&&this.camera.position.y<safeY){
+      this.camera.position.y=safeY
+      this.camera.updateMatrixWorld(true)
+    }
+  }
+
   /** Move over the terrain for two seconds, sampling ground height every frame. */
   private updateVRMovement(time:number){
     const move=this.vrMove
@@ -280,7 +291,7 @@ export class SceneEngine {
       this.resetGaze()
       return
     }
-    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.5)
     this.camera.position.set(x,safeY??terrain+this.eyeHeight,z)
     this.camera.updateMatrixWorld(true)
     if(t>=1){
