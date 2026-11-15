@@ -252,3 +252,23 @@ button:active:not(:disabled){transform:translateY(1px)}
   .vr-controls button{padding:12px 14px;border-radius:11px}
 }
 @media(prefers-reduced-motion:reduce){button,.hero-photo img,.photo-grid img,.gallery img{transition:none}}
+
+/* Cardboard: unobstructed view and discreet headset controls */
+.is-vr .vr-gaze-hint{display:none!important}
+.is-vr .vr-reticle{width:8px;height:8px;margin:-4px 0 0 -4px;border:1px solid #ffffffa8;background:transparent;box-shadow:0 0 5px #0008;transform:none}
+.is-vr .vr-controls{
+  position:absolute;left:50%;right:auto;bottom:calc(5px + env(safe-area-inset-bottom));
+  transform:translateX(-50%);gap:7px;z-index:12;
+}
+.is-vr .vr-controls button{
+  min-height:30px;padding:6px 10px;gap:6px;
+  border:1px solid #ffffff45;border-radius:8px;
+  background:rgba(10,31,25,.42);color:#ffffffd9;
+  box-shadow:0 2px 10px #0002;backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);font-size:10px;font-weight:550;
+}
+.is-vr .vr-controls button svg{width:14px;height:14px}
+@media(max-width:900px){
+  .is-vr .vr-controls{bottom:calc(4px + env(safe-area-inset-bottom));gap:6px}
+  .is-vr .vr-controls button{min-height:28px;padding:5px 9px;font-size:9px;border-radius:7px}
+}
