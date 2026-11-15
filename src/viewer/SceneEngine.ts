@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { places, type Language } from '../data/content'
 import { lighting } from './lighting'
-import { loadLandscape, disposeScene, getSafeTeleportPosition } from './assets'
+import { loadLandscape, disposeScene } from './assets'
 import { Cardboard } from './Cardboard'
 import { Heightfield } from './heightfield'
 /** Camera poses (three.js Y-up). 'reset' mirrors the reference photo: high, from the south shore,
