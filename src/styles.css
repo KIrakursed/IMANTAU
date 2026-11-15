@@ -29,3 +29,120 @@ html,body{overflow:hidden;height:100%}.museum{overflow:clip}
 /* VR gaze reticle: fills while looking at the ground */
 .vr-reticle{width:22px;height:22px;margin:-11px 0 0 -11px;border:2px solid #ffffffcc;border-radius:50%;background:conic-gradient(#ffffffd9 calc(var(--gaze,0)*360deg),transparent 0);box-shadow:0 0 0 1px #0006;transform:scale(calc(.55 + var(--gaze,0)*.45))}
 .vr-gaze-hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);color:#fff;background:#0008;padding:6px 10px;border-radius:4px;font-size:11px;pointer-events:none}
+
+
+/* Refined mobile presentation: legible glass controls, safe-area spacing and calmer hierarchy. */
+:root{color-scheme:light}
+.museum{background:#dce7e7}
+.scene-host canvas{image-rendering:auto}
+.topbar,.scene-heading,.explorer,.bottom-bar,.camera-presets,.viewport-actions .icon{backdrop-filter:blur(14px) saturate(1.18);-webkit-backdrop-filter:blur(14px) saturate(1.18)}
+button{ -webkit-tap-highlight-color:transparent}
+@media(max-width:900px){
+  .topbar{
+    height:calc(64px + env(safe-area-inset-top));
+    padding:env(safe-area-inset-top) 16px 0;
+    background:linear-gradient(180deg,#f8f8f1f2,#f8f8f1dc);
+    border-bottom:1px solid #ffffffa8;
+    box-shadow:0 5px 24px #1a34251a
+  }
+  .brand{font-size:17px;letter-spacing:2.2px}
+  .brand small{font-size:6px;letter-spacing:1.15px;color:#687569}
+  .top-actions{gap:4px}
+  .top-actions .icon{width:40px;height:40px;background:#ffffff80;border:1px solid #244a3918}
+  .language{padding:3px;background:#e8ece3;border:1px solid #d8dfd2;border-radius:999px}
+  .language button{min-width:38px;border-radius:999px;font-weight:700}
+  .scene-heading{
+    top:calc(82px + env(safe-area-inset-top));
+    left:14px;
+    max-width:min(72vw,310px);
+    padding:11px 15px 12px;
+    border:1px solid #ffffffb8;
+    background:linear-gradient(135deg,#fbfaf0ed,#f3f5e9dc);
+    border-radius:13px;
+    box-shadow:0 10px 30px #193b2a20;
+  }
+  .scene-heading .eyebrow{font-size:8px;letter-spacing:1.2px;color:#61725e}
+  .scene-heading h1{font-size:clamp(39px,11vw,52px);letter-spacing:-2px;margin:5px 0 4px}
+  .scene-heading p{font-size:10px;line-height:1.5;color:#526456;max-width:210px}
+  .viewport-actions{top:calc(88px + env(safe-area-inset-top));right:13px;gap:9px}
+  .viewport-actions .icon{
+    width:42px;height:42px;
+    background:#f9f8f0e8;
+    border:1px solid #ffffffc9;
+    box-shadow:0 5px 18px #1b35251c;
+    color:#244a39
+  }
+  .bottom-bar,.has-panel .bottom-bar{
+    left:12px;right:12px;
+    bottom:calc(12px + env(safe-area-inset-bottom));
+    gap:8px;
+    padding:8px;
+    border:1px solid #ffffffbd;
+    border-radius:15px;
+    background:linear-gradient(135deg,#faf9f0f2,#eef1e6eb);
+    box-shadow:0 12px 35px #1835262b;
+    backdrop-filter:blur(18px) saturate(1.25);
+    -webkit-backdrop-filter:blur(18px) saturate(1.25)
+  }
+  .camera-presets{
+    flex:1;min-width:0;justify-content:space-around;
+    margin:0;padding:3px;border-radius:10px;
+    border:1px solid #dce2d5;background:#e9ede3;
+    box-shadow:none
+  }
+  .camera-presets button,.has-panel .camera-presets button{
+    flex:1;min-width:0;padding:12px 5px;
+    font-size:10px;font-weight:600;color:#405746;
+    border-radius:7px
+  }
+  .camera-presets button+button{border-left:0}
+  .camera-presets button:active{background:#dce6d7}
+  .vr-button{
+    min-height:46px;padding:0 13px;
+    border-radius:10px;background:linear-gradient(135deg,#28543e,#183d2e);
+    box-shadow:0 5px 14px #183d2e2e;
+    font-weight:700;white-space:nowrap
+  }
+  .interaction-hint,.has-panel .interaction-hint{display:none}
+  .info-panel{
+    bottom:calc(83px + env(safe-area-inset-bottom));
+    height:min(47dvh,440px);
+    max-height:440px;
+    border:1px solid #ffffffd4;
+    border-radius:16px;
+    background:#fbfaf3f5;
+    box-shadow:0 18px 55px #102b1f36;
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px)
+  }
+  .panel-scroll{padding:16px 19px}
+  .info-panel h2{font-size:30px;letter-spacing:-.6px}
+  .info-panel .lead{font-size:12px;line-height:1.7}
+  .panel-footer{padding:11px 15px;background:#f3f4eb;border-radius:0 0 16px 16px}
+  .explorer{bottom:calc(84px + env(safe-area-inset-bottom));background:#fbfaf3f5;border:1px solid #ffffffd4;box-shadow:0 18px 55px #102b1f36;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  .loading{inset:calc(64px + env(safe-area-inset-top)) 0 0;background:#e9eee6f5}
+  .loading h2{font-size:30px}
+  .marker-label{background:#fbfaf0f2;border:1px solid #ffffffbd;box-shadow:0 5px 18px #142f3622;border-radius:7px;padding:8px 10px}
+  .modal{border-radius:16px}
+  .modal-inner{padding:27px 22px}
+}
+@media(max-width:520px){
+  .topbar{padding-left:13px;padding-right:12px}
+  .brand{font-size:16px;gap:7px}
+  .brand small{font-size:5.5px}
+  .top-actions .icon{width:37px;height:37px}
+  .language button{min-width:34px;padding:7px 5px}
+  .scene-heading{max-width:calc(100vw - 92px);left:12px}
+  .scene-heading p{max-width:175px}
+  .viewport-actions{right:10px}
+  .viewport-actions .icon{width:39px;height:39px}
+  .bottom-bar,.has-panel .bottom-bar{left:9px;right:9px;padding:7px;gap:6px}
+  .camera-presets button,.has-panel .camera-presets button{font-size:9px;padding:11px 3px}
+  .vr-button{padding:0 10px;font-size:9px;gap:5px}
+  .vr-button svg{width:17px;height:17px}
+  .info-panel{left:10px;right:10px}
+}
+@media(orientation:landscape) and (max-width:900px){
+  .scene-heading{top:calc(72px + env(safe-area-inset-top));transform:scale(.82);transform-origin:top left}
+  .bottom-bar,.has-panel .bottom-bar{bottom:calc(7px + env(safe-area-inset-bottom))}
+}
