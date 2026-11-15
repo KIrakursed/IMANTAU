@@ -49,9 +49,17 @@ export class Cardboard {
     this.camera.quaternion.copy(this.correction).multiply(this.raw)
     this.camera.aspect=width/height;this.camera.updateProjectionMatrix();this.camera.updateMatrixWorld(true)
     this.stereo.update(this.camera)
+    // Split at an integer CSS-pixel boundary. A fractional width/2 can be rounded
+    // differently by WebGL at non-integer device pixel ratios, leaving a black seam.
+    const leftWidth=Math.floor(width/2)
+    const rightWidth=width-leftWidth
     renderer.setScissorTest(true)
-    renderer.setScissor(0,0,width/2,height);renderer.setViewport(0,0,width/2,height);renderer.render(scene,this.stereo.cameraL)
-    renderer.setScissor(width/2,0,width/2,height);renderer.setViewport(width/2,0,width/2,height);renderer.render(scene,this.stereo.cameraR)
+    renderer.setScissor(0,0,leftWidth,height)
+    renderer.setViewport(0,0,leftWidth,height)
+    renderer.render(scene,this.stereo.cameraL)
+    renderer.setScissor(leftWidth,0,rightWidth,height)
+    renderer.setViewport(leftWidth,0,rightWidth,height)
+    renderer.render(scene,this.stereo.cameraR)
     renderer.setScissorTest(false)
   }
   get stale(){return this.active&&performance.now()-this.latest>6000}
