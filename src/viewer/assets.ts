@@ -131,9 +131,9 @@ function applyLakeShorelineMask(material:THREE.MeshStandardMaterial){
         vec2 lakeP=vec2(vImantauWaterWorld.x,vImantauWaterWorld.z);
         float lakeD=min(
           min(imantauEllipse(lakeP,vec2(0.0,-5.0),vec2(48.0,26.0),0.0),
-              imantauEllipse(lakeP,vec2(52.0,-38.0),vec2(40.0,12.0),0.4887)),
+              imantauEllipse(lakeP,vec2(52.0,-38.0),vec2(40.0,12.0),-0.4887)),
           min(imantauEllipse(lakeP,vec2(30.0,14.0),vec2(20.0,13.0),0.0),
-              imantauEllipse(lakeP,vec2(-62.0,-50.0),vec2(20.0,5.0),0.1745))
+              imantauEllipse(lakeP,vec2(-62.0,-50.0),vec2(20.0,5.0),-0.1745))
         );
         if(lakeD>0.0) discard;`)
       .replace('#include <color_fragment>',`#include <color_fragment>
