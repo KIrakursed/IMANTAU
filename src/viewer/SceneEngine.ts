@@ -255,7 +255,8 @@ export class SceneEngine {
     const x=origin.x+offset.x,z=origin.z+offset.z
     const terrainHeight=this.ground.at(x,z)
     if(terrainHeight===null)return null
-    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)\n    return new THREE.Vector3(x,safeY??terrainHeight+this.eyeHeight,z)
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)
+    return new THREE.Vector3(x,safeY??terrainHeight+this.eyeHeight,z)
   }
 
   private resetGaze(){
@@ -278,7 +279,8 @@ export class SceneEngine {
       this.resetGaze()
       return
     }
-    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)\n    this.camera.position.set(x,safeY??terrain+this.eyeHeight,z)
+    const safeY=getSafeRidgeCameraY((sampleX,sampleZ)=>this.ground?.at(sampleX,sampleZ)??null,x,z,this.eyeHeight,1.4)
+    this.camera.position.set(x,safeY??terrain+this.eyeHeight,z)
     this.camera.updateMatrixWorld(true)
     if(t>=1){
       this.camera.position.copy(move.to)
