@@ -30,6 +30,8 @@ export class SceneEngine {
   // VR gaze locomotion: look at the ground for GAZE_MS and the viewer glides there.
   private gazePoint=new THREE.Vector3(1e9,0,0);private gazeDwell=0;private gazeShown=0
   private walk?:{start:number;from:THREE.Vector3;to:THREE.Vector3}
+  private focusedId:string|null=null
+  private teleportArmed=true
   private observer:ResizeObserver
   private dead=false
   private width=1;private height=1
@@ -63,6 +65,7 @@ export class SceneEngine {
     this.observer=new ResizeObserver(this.resize);this.observer.observe(host);this.resize()
     host.addEventListener('dblclick',this.doubleClick)
     this.renderer.domElement.addEventListener('keydown',this.key)
+    this.renderer.domElement.addEventListener('pointerdown',this.vrPointer)
     this.renderer.domElement.addEventListener('webglcontextlost',this.contextLost)
     this.animate()
     void this.load()
@@ -106,6 +109,7 @@ export class SceneEngine {
   focus(id:string){
     const p=places.find(p=>p.id===id),target=this.targets.get(id)
     if(!p||!target)return
+    this.focusedId=id
     // Keep the chosen POI centered in the actual camera frustum. The previous
     // diagonal offset was especially misleading on portrait screens and when
     // a side/bottom information panel changed the viewport composition.
@@ -120,6 +124,7 @@ export class SceneEngine {
     this.ring.scale.setScalar(Math.max(8,p.distance*.28))
   }
   preset(name:'reset'|'aerial'|'shore'){
+    this.focusedId=null
     const target=POSES[name].target.clone(),position=POSES[name].position.clone()
     // Portrait screens: back off until the lake (~150 units wide) fits the horizontal field of view.
     const aspect=this.width/this.height
@@ -159,26 +164,36 @@ export class SceneEngine {
   }
   setAnnotations(value:boolean){this.annotations=value}
   async startVR(){
-    // Start VR from the camera's current world pose. A fixed shore spawn here
-    // used to discard the user's chosen POI and every selected camera preset.
     this.transition=undefined
     this.controls.update()
-    const spawn=this.camera.position.clone()
-    const direction=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion).normalize()
-    const target=spawn.clone().addScaledVector(direction,100)
-    // Keep the viewer above the terrain without relocating them to another site.
-    const terrainHeight=this.ground?.at(spawn.x,spawn.z)??null
-    if(terrainHeight!==null)spawn.y=Math.max(spawn.y,terrainHeight+4.8)
-    target.y=THREE.MathUtils.clamp(target.y,spawn.y-20,spawn.y+20)
+    let spawn=this.camera.position.clone()
+    let target=this.controls.target.clone()
+    // If a POI was selected, spawn beside that exact location instead of
+    // inheriting the distant overview camera position.
+    if(this.focusedId){
+      const poi=this.targets.get(this.focusedId)
+      if(poi){
+        const away=this.camera.position.clone().sub(poi)
+        away.y=0
+        if(away.lengthSq()<1e-5)away.set(0,0,1)
+        away.normalize()
+        spawn=poi.clone().addScaledVector(away,16)
+        const ground=this.ground?.at(spawn.x,spawn.z)??null
+        spawn.y=ground===null?poi.y+8:ground+4.8
+        target=poi.clone()
+      }
+    }
     const ok=await this.cardboard.start(spawn,target)
     this.controls.enabled=!ok
     if(ok){
+      this.camera.position.copy(spawn)
       this.camera.clearViewOffset()
       this.resize()
+      this.teleportArmed=true
     }
     return ok
   }
-  stopVR(){this.walk=undefined;this.gazeDwell=0;this.setGaze(0);this.cardboard.stop();this.controls.enabled=true;this.resize()}
+  stopVR(){this.walk=undefined;this.teleportArmed=true;this.cardboard.stop();this.controls.enabled=true;this.resize()}
   private animate=()=>{
     if(this.dead)return
     this.frame=requestAnimationFrame(this.animate)
@@ -190,31 +205,58 @@ export class SceneEngine {
     this.labels.forEach(label=>label.visible=this.cardboard.active&&this.annotations)
     if(this.cardboard.active){
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
-      else{this.updateGaze(delta,time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
+      else{if(this.teleportArmed)this.updateGaze();this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
       this.controls.update();this.renderer.setScissorTest(false);this.renderer.setViewport(0,0,this.width,this.height);this.renderer.render(this.scene,this.camera)
       if(import.meta.env.DEV&&time-this.statsTime>1000){this.statsTime=time;this.renderer.domElement.dataset.diagnostics=JSON.stringify({...this.stats,fps:Math.round(1000/(this.samples.reduce((a,b)=>a+b,0)/this.samples.length))})}
       if(time-this.lastMarker>50){this.lastMarker=time;this.cb.markers(places.map(p=>{const target=this.targets.get(p.id);if(!target)return{id:p.id,x:0,y:0,visible:false};this.projection.copy(target).project(this.camera);return{id:p.id,x:(this.projection.x*.5+.5)*this.width,y:(-.5*this.projection.y+.5)*this.height,visible:this.annotations&&this.projection.z>-1&&this.projection.z<1&&Math.abs(this.projection.x)<.94&&Math.abs(this.projection.y)<.9}}))}
     }
   }
-  private setGaze(p:number){if(Math.abs(p-this.gazeShown)>.04||(p===0&&this.gazeShown!==0)){this.gazeShown=p;this.cb.gaze?.(p)}}
-  private updateGaze(delta:number,time:number){
-    const GAZE_MS=1600,EYE=2.4
-    if(this.walk){
-      const t=Math.min((time-this.walk.start)/1400,1),e=t*t*(3-2*t)
-      this.camera.position.lerpVectors(this.walk.from,this.walk.to,e)
-      if(t===1)this.walk=undefined
-      return
+  private teleportFromRay(origin:THREE.Vector3,direction:THREE.Vector3){
+    if(!this.cardboard.active||!this.ground)return false
+    const dir=direction.clone().normalize()
+    // Prefer a nearby authored POI when the ray is aimed directly at its marker.
+    let nearest:THREE.Vector3|undefined,nearestAlong=Infinity
+    for(const target of this.targets.values()){
+      const offset=target.clone().sub(origin),along=offset.dot(dir)
+      if(along<=0||along>=nearestAlong)continue
+      const miss=offset.addScaledVector(dir,-along).length()
+      if(miss<=7){nearest=target;nearestAlong=along}
     }
-    if(!this.ground)return
-    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion)
-    // Only a downward look at dry land (above the lake surface) counts as "go there".
-    const hit=dir.y<-.1?this.ground.raycast(this.camera.position,dir):null
-    if(!hit||hit.y<.15||hit.distanceTo(this.camera.position)<3){this.gazeDwell=0;this.gazePoint.set(1e9,0,0);this.setGaze(0);return}
-    if(hit.distanceTo(this.gazePoint)>4){this.gazePoint.copy(hit);this.gazeDwell=0}else this.gazeDwell+=Math.min(delta,100)
-    const p=Math.min(this.gazeDwell/GAZE_MS,1);this.setGaze(p)
-    if(p>=1){this.walk={start:time,from:this.camera.position.clone(),to:hit.clone().add(new THREE.Vector3(0,EYE,0))};this.gazeDwell=0;this.gazePoint.set(1e9,0,0);this.setGaze(0)}
+    if(nearest){
+      const away=this.camera.position.clone().sub(nearest)
+      away.y=0
+      if(away.lengthSq()<1e-5)away.set(0,0,1)
+      away.normalize()
+      const destination=nearest.clone().addScaledVector(away,12)
+      destination.y=(this.ground.at(destination.x,destination.z)??nearest.y+5)+4.8
+      if(destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
+      this.camera.updateMatrixWorld(true)
+      return true
+    }
+    const hit=this.ground.raycast(origin,dir,260,.8)
+    if(!hit||hit.y<.15||hit.distanceTo(origin)<5)return false
+    const destination=hit.clone().add(new THREE.Vector3(0,4.8,0))
+    if(destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
+    this.camera.updateMatrixWorld(true)
+    return true
+  }
+  private vrPointer=(event:PointerEvent)=>{
+    if(!this.cardboard.active)return
+    event.preventDefault()
+    const rect=this.renderer.domElement.getBoundingClientRect()
+    const x=((event.clientX-rect.left)/rect.width)*2-1
+    const y=-((event.clientY-rect.top)/rect.height)*2+1
+    const direction=new THREE.Vector3(x,y,.5).unproject(this.camera).sub(this.camera.position).normalize()
+    if(this.teleportFromRay(this.camera.position,direction))this.teleportArmed=false
+  }
+  private updateGaze(){
+    if(!this.cardboard.active)return
+    const direction=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion).normalize()
+    const moved=this.teleportFromRay(this.camera.position,direction)
+    if(moved)this.teleportArmed=false
+    else this.teleportArmed=true
   }
   get stats(){return{...this.renderer.info.memory,drawCalls:this.renderer.info.render.calls,triangles:this.renderer.info.render.triangles,poiCount:this.targets.size,groundReady:!!this.ground,groundAtLake:this.ground?.at(-12.6,-66)??null}}
-  dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
+  dispose(){this.dead=true;cancelAnimationFrame(this.frame);this.cardboard.stop();this.observer.disconnect();this.controls.dispose();this.host.removeEventListener('dblclick',this.doubleClick);this.renderer.domElement.removeEventListener('keydown',this.key);this.renderer.domElement.removeEventListener('pointerdown',this.vrPointer);this.renderer.domElement.removeEventListener('webglcontextlost',this.contextLost);disposeScene(this.scene);this.cleanupLighting();this.renderer.dispose();this.renderer.domElement.remove()}
 }
