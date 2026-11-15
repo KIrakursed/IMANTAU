@@ -110,7 +110,8 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
   const gltf=await new GLTFLoader().loadAsync(import.meta.env.BASE_URL+'scenes/IMANTAU-real.glb',e=>progress(e.total?e.loaded/e.total:0))
   const root=gltf.scene
   root.updateMatrixWorld(true)
-  const detailTexture=createCrispDetailTexture(renderer)\n  const uses=new Map<string,THREE.Mesh[]>()
+  const detailTexture=createCrispDetailTexture(renderer)
+  const uses=new Map<string,THREE.Mesh[]>()
   root.traverse(object=>{
     if(!(object instanceof THREE.Mesh))return
     const material=object.material as THREE.MeshStandardMaterial
