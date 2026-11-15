@@ -62,7 +62,7 @@ function improveTerrainMaterial(mesh:THREE.Mesh,renderer:THREE.WebGLRenderer,det
       material.map.minFilter=THREE.LinearMipmapLinearFilter
       material.map.magFilter=THREE.LinearFilter
     }
-    material.bumpMap=null
+    material.bumpMap=detail
     material.roughness=Math.max(material.roughness,.82)
     material.metalness=Math.min(material.metalness,.04)
     material.onBeforeCompile=(shader)=>{
@@ -92,13 +92,13 @@ function improveTerrainMaterial(mesh:THREE.Mesh,renderer:THREE.WebGLRenderer,det
           // 180 repeats over the authored 380x440m terrain footprint.
           vec3 terrainP=vTerrainWorldPos*0.40909;
           vec3 detailAlbedo=imantauTriplanar(uTerrainDetail,terrainP,terrainN);
-          float slopeRock=1.0-smoothstep(0.58,0.78,terrainN.y);
+          float slopeRock=smoothstep(0.25,0.42,1.0-terrainN.y);
           vec3 grassDetail=diffuseColor.rgb*(0.82+detailAlbedo*0.34);
           vec3 stoneBase=vec3(0.43,0.43,0.39);
           vec3 stoneDetail=stoneBase*(0.72+detailAlbedo*0.58);
           diffuseColor.rgb=mix(grassDetail,stoneDetail,slopeRock);`)
     }
-    material.customProgramCacheKey=()=> 'imantau-terrain-triplanar-detail-v3'
+    material.customProgramCacheKey=()=> 'imantau-terrain-triplanar-detail-v4'
     material.needsUpdate=true
   }
 }
@@ -126,7 +126,7 @@ export function getSafeTeleportPosition(hitPoint:THREE.Vector3,hitNormal?:THREE.
 
 
 /** Lower GLB terrain vertices beneath the water surface inside the lake basin. */
-function lowerLakeBed(mesh:THREE.Mesh,waterLevel=.02,bedLevel=-.35){
+function lowerLakeBed(mesh:THREE.Mesh,waterLevel=.02,bedLevel=-2.48){
   mesh.updateMatrixWorld(true)
   const position=mesh.geometry.getAttribute('position')
   const inverse=mesh.matrixWorld.clone().invert()
@@ -216,14 +216,14 @@ export async function loadLandscape(progress:(n:number)=>void,renderer:THREE.Web
       if(material instanceof THREE.Material){
         const maxAnisotropy=renderer.capabilities.getMaxAnisotropy()
         for(const value of Object.values(material)){
-          if(value instanceof THREE.Texture)value.anisotropy=maxAnisotropy
+          if(value instanceof THREE.Texture){value.anisotropy=maxAnisotropy;value.needsUpdate=true}
         }
       }
       if(material.name==='Lake_Water'&&material instanceof THREE.MeshStandardMaterial){
-        object.castShadow=false;object.receiveShadow=false;object.renderOrder=1
+        object.castShadow=false;object.receiveShadow=false;object.renderOrder=1;object.position.y=.02
         material.envMapIntensity=1.35
         material.metalness=.12;material.roughness=.12
-        material.polygonOffset=true;material.polygonOffsetFactor=-1;material.polygonOffsetUnits=-1
+        material.polygonOffset=true;material.polygonOffsetFactor=-2;material.polygonOffsetUnits=-2
         applyLakeShorelineMask(material)
       }
       if(material.name==='Terrain'&&material instanceof THREE.MeshStandardMaterial){
