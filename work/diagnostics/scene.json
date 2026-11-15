@@ -1,0 +1,66 @@
+{
+  "terrain": {
+    "vertices": 116339,
+    "faces": 115656,
+    "extent": [
+      -190.0,
+      190.0,
+      -120.0,
+      320.0
+    ]
+  },
+  "pine": {
+    "sourceNeedleFaces": 1480,
+    "webFaces": 738,
+    "height": 3.08
+  },
+  "forest": {
+    "trees": 4435,
+    "trianglesPerTree": 947,
+    "budgetTrees": 4435
+  },
+  "boulders": 84,
+  "water": {
+    "shapeKeys": 102,
+    "scale": [
+      1.9500000476837158,
+      1.9500000476837158,
+      0.03500000014901161
+    ],
+    "uvTiling": 9,
+    "tint": "#4a86d6",
+    "alpha": 0.84,
+    "actions": [
+      "Key|Take 001|BaseLayer"
+    ]
+  },
+  "pois": {
+    "POI_island": [
+      -14,
+      10
+    ],
+    "POI_lake": [
+      12,
+      18
+    ],
+    "POI_forest": [
+      -62,
+      8
+    ],
+    "POI_mountain": [
+      5,
+      236
+    ],
+    "POI_beach": [
+      40,
+      -30
+    ],
+    "POI_rocks": [
+      -8,
+      -62
+    ]
+  },
+  "output": "public\\scenes\\IMANTAU-scene.glb",
+  "outputBytes": 11951900,
+  "seconds": 113.0
+}

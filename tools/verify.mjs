@@ -33,4 +33,4 @@ globalThis.DeviceOrientationEvent.requestPermission=async()=> 'denied';assert.eq
 globalThis.window.isSecureContext=false;assert.equal(await board.start(),false)
 delete globalThis.DeviceOrientationEvent;globalThis.window.isSecureContext=true;assert.equal(await board.start(),false)
 sample=false
-console.log('PASS: URL rules, KK/RU key parity, four linked POIs, synthetic sensor permission branches, stereo projection/viewport/eye separation, recenter and camera cleanup.')
+console.log('PASS: URL rules, KK/RU key parity, linked POIs, synthetic sensor permission branches, stereo projection/viewport/eye separation, recenter and camera cleanup.')

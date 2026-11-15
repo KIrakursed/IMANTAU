@@ -9,3 +9,7 @@ dist/
 work/diagnostics/textures/
 work/blender/*.png
 work/qa/
+
+# Third-party source assets (pine, water): licence unknown, kept local
+assets/source/
+.claude/
