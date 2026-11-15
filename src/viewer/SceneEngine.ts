@@ -216,7 +216,7 @@ export class SceneEngine {
     })
     if(this.cardboard.active){
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
-      else{this.updateVRMovement(time,delta);if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
+      else{this.updateVRMovement(time);if(!this.vrMove)this.updateGaze(time);this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
       this.controls.update();this.renderer.setScissorTest(false);this.renderer.setViewport(0,0,this.width,this.height);this.renderer.render(this.scene,this.camera)
       if(import.meta.env.DEV&&time-this.statsTime>1000){this.statsTime=time;this.renderer.domElement.dataset.diagnostics=JSON.stringify({...this.stats,fps:Math.round(1000/(this.samples.reduce((a,b)=>a+b,0)/this.samples.length))})}
@@ -265,7 +265,7 @@ export class SceneEngine {
   }
 
   /** Move over the terrain for two seconds, sampling ground height every frame. */
-  private updateVRMovement(time:number,delta:number){
+  private updateVRMovement(time:number){
     const move=this.vrMove
     if(!move||!this.ground)return
     const t=THREE.MathUtils.clamp((time-move.start)/move.duration,0,1)
