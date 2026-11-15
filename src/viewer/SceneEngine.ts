@@ -103,7 +103,22 @@ export class SceneEngine {
   setPanel(value:boolean){this.panel=value;this.resize()}
   private cancelTransition=()=>{this.transition=undefined}
   private move(target:THREE.Vector3,position:THREE.Vector3){this.transition={start:performance.now(),from:this.camera.position.clone(),to:position,targetFrom:this.controls.target.clone(),targetTo:target}}
-  focus(id:string){const p=places.find(p=>p.id===id),target=this.targets.get(id);if(!p||!target)return;const d=p.distance;this.move(target.clone(),target.clone().add(new THREE.Vector3(d*.8,d*.75,d)));this.ring.position.copy(target);this.ring.visible=true;this.ring.scale.setScalar(p.distance*.28)}
+  focus(id:string){
+    const p=places.find(p=>p.id===id),target=this.targets.get(id)
+    if(!p||!target)return
+    // Keep the chosen POI centered in the actual camera frustum. The previous
+    // diagonal offset was especially misleading on portrait screens and when
+    // a side/bottom information panel changed the viewport composition.
+    const direction=this.camera.position.clone().sub(this.controls.target)
+    if(direction.lengthSq()<1e-6)direction.set(0,.55,1)
+    direction.normalize()
+    const distance=THREE.MathUtils.clamp(p.distance,24,260)
+    const position=target.clone().addScaledVector(direction,distance)
+    this.move(target.clone(),position)
+    this.ring.position.copy(target)
+    this.ring.visible=true
+    this.ring.scale.setScalar(Math.max(8,p.distance*.28))
+  }
   preset(name:'reset'|'aerial'|'shore'){
     const target=POSES[name].target.clone(),position=POSES[name].position.clone()
     // Portrait screens: back off until the lake (~150 units wide) fits the horizontal field of view.
@@ -144,21 +159,17 @@ export class SceneEngine {
   }
   setAnnotations(value:boolean){this.annotations=value}
   async startVR(){
+    // Start VR from the camera's current world pose. A fixed shore spawn here
+    // used to discard the user's chosen POI and every selected camera preset.
     this.transition=undefined
-
-    // The VR spawn is anchored to the authored south-east shore camera pose.
-    // Resolve its Y coordinate from the loaded terrain instead of hard-coding
-    // a position that may put the viewer inside the lake or below the ground.
-    const shore=POSES.shore.position
-    const terrainHeight=this.ground?.at(shore.x,shore.z)??null
-    const spawn=new THREE.Vector3(
-      shore.x,
-      terrainHeight===null?shore.y:terrainHeight+4.8,
-      shore.z,
-    )
-    const target=POSES.shore.target.clone()
-    target.y=spawn.y
-
+    this.controls.update()
+    const spawn=this.camera.position.clone()
+    const direction=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion).normalize()
+    const target=spawn.clone().addScaledVector(direction,100)
+    // Keep the viewer above the terrain without relocating them to another site.
+    const terrainHeight=this.ground?.at(spawn.x,spawn.z)??null
+    if(terrainHeight!==null)spawn.y=Math.max(spawn.y,terrainHeight+4.8)
+    target.y=THREE.MathUtils.clamp(target.y,spawn.y-20,spawn.y+20)
     const ok=await this.cardboard.start(spawn,target)
     this.controls.enabled=!ok
     if(ok){
