@@ -205,14 +205,14 @@ export class SceneEngine {
     this.labels.forEach(label=>label.visible=this.cardboard.active&&this.annotations)
     if(this.cardboard.active){
       if(this.cardboard.stale){this.stopVR();this.cb.sensorStopped()}
-      else{if(this.teleportArmed)this.updateGaze();this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
+      else{this.updateGaze();this.cardboard.render(this.renderer,this.scene,this.width,this.height)}
     }else{
       this.controls.update();this.renderer.setScissorTest(false);this.renderer.setViewport(0,0,this.width,this.height);this.renderer.render(this.scene,this.camera)
       if(import.meta.env.DEV&&time-this.statsTime>1000){this.statsTime=time;this.renderer.domElement.dataset.diagnostics=JSON.stringify({...this.stats,fps:Math.round(1000/(this.samples.reduce((a,b)=>a+b,0)/this.samples.length))})}
       if(time-this.lastMarker>50){this.lastMarker=time;this.cb.markers(places.map(p=>{const target=this.targets.get(p.id);if(!target)return{id:p.id,x:0,y:0,visible:false};this.projection.copy(target).project(this.camera);return{id:p.id,x:(this.projection.x*.5+.5)*this.width,y:(-.5*this.projection.y+.5)*this.height,visible:this.annotations&&this.projection.z>-1&&this.projection.z<1&&Math.abs(this.projection.x)<.94&&Math.abs(this.projection.y)<.9}}))}
     }
   }
-  private teleportFromRay(origin:THREE.Vector3,direction:THREE.Vector3){
+  private teleportFromRay(origin:THREE.Vector3,direction:THREE.Vector3,perform=true){
     if(!this.cardboard.active||!this.ground)return false
     const dir=direction.clone().normalize()
     // Prefer a nearby authored POI when the ray is aimed directly at its marker.
@@ -230,15 +230,15 @@ export class SceneEngine {
       away.normalize()
       const destination=nearest.clone().addScaledVector(away,12)
       destination.y=(this.ground.at(destination.x,destination.z)??nearest.y+5)+4.8
-      if(destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
-      this.camera.updateMatrixWorld(true)
+      if(perform&&destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
+      if(perform)this.camera.updateMatrixWorld(true)
       return true
     }
     const hit=this.ground.raycast(origin,dir,260,.8)
     if(!hit||hit.y<.15||hit.distanceTo(origin)<5)return false
     const destination=hit.clone().add(new THREE.Vector3(0,4.8,0))
-    if(destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
-    this.camera.updateMatrixWorld(true)
+    if(perform&&destination.distanceTo(this.camera.position)>2)this.camera.position.copy(destination)
+    if(perform)this.camera.updateMatrixWorld(true)
     return true
   }
   private vrPointer=(event:PointerEvent)=>{
@@ -253,7 +253,7 @@ export class SceneEngine {
   private updateGaze(){
     if(!this.cardboard.active)return
     const direction=new THREE.Vector3(0,0,-1).applyQuaternion(this.camera.quaternion).normalize()
-    const moved=this.teleportFromRay(this.camera.position,direction)
+    const moved=this.teleportFromRay(this.camera.position,direction,this.teleportArmed)
     if(moved)this.teleportArmed=false
     else this.teleportArmed=true
   }
