@@ -49,7 +49,7 @@ export class SceneEngine {
   private statsTime=0
   constructor(private host:HTMLElement,private cb:ViewerCallbacks){
     this.renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'})
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.75));host.appendChild(this.renderer.domElement)
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio,2));host.appendChild(this.renderer.domElement)
     this.renderer.domElement.tabIndex=0
     this.controls=new OrbitControls(this.camera,this.renderer.domElement)
     this.controls.enableDamping=true;this.controls.dampingFactor=.07;this.controls.minDistance=4;this.controls.maxDistance=1100;this.controls.maxPolarAngle=Math.PI*.48
@@ -110,8 +110,8 @@ export class SceneEngine {
     const aspect=this.width/this.height
     if(aspect<1&&name!=='shore'){
       const halfH=Math.tan(THREE.MathUtils.degToRad(this.camera.fov/2))*aspect
-      const distance=THREE.MathUtils.clamp(115/halfH,300,660)
-      const direction=name==='aerial'?new THREE.Vector3(0,1,.08):new THREE.Vector3(.06,.72,.69)
+      const distance=THREE.MathUtils.clamp(105/halfH,350,480)
+      const direction=name==='aerial'?new THREE.Vector3(0,1,.08):new THREE.Vector3(.06,.58,.81)
       target.set(0,0,-30) // aim at the lake itself; the wide-screen pose looks past it to the mountain
       position.copy(target).addScaledVector(direction.normalize(),distance)
     }
