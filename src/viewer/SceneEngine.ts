@@ -239,7 +239,6 @@ export class SceneEngine {
       if(object instanceof THREE.Mesh){object.geometry.dispose();for(const material of materialsOf(object))material.dispose()}
       console.info('[IMANTAU] Removed obsolete lake overlay mesh:',object.name)
     }
-    detail?.dispose()
     root.updateMatrixWorld(true)
   }
 
